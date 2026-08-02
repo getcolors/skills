@@ -19,15 +19,15 @@
 ;; has, which on an expired session are the expired ones.
 ;;
 ;; This machine is headless (no DISPLAY, no browser on PATH) and reached over
-;; SSH, so the login URL has to travel to the browser on the laptop. It is put
-;; on the laptop's clipboard with OSC 52, the escape sequence that asks the
-;; *terminal emulator* to set the system clipboard — which happens on the
-;; laptop side of the SSH connection, where the browser is.
+;; SSH, so the login URL has to travel to the browser on the laptop. `$EDITOR`
+;; names the current Emacs server; the script asks its `emacsclient` to evaluate
+;; `kill-new`, and that Emacs carries the URL to the laptop's clipboard.
 ;;
-;; Getting the sequence to the terminal takes one trick. A process spawned by
-;; an agent tool has no controlling terminal, so /dev/tty fails with ENXIO. The
-;; pty is still open further up the process tree, so the sequence is written
-;; directly to that device instead.
+;; The clipboard is the *only* channel. The URL is never printed, on any path
+;; and under any flag. Before the OCI CLI is spawned, the script requires an
+;; `emacsclient -s <server>` (or `--socket-name`) command in `$EDITOR` and proves
+;; that the server answers. If the later `kill-new` call fails, the login process
+;; is cancelled rather than falling back to the screen.
 ;;
 ;; One thing this cannot do for you: `oci session authenticate` serves the OAuth
 ;; redirect on http://localhost:8181, and "localhost" is resolved by the browser
@@ -51,8 +51,9 @@
     "  --region ID         region for the login flow (default: the profile's region)"
     "  --force             skip the refresh path and re-authenticate outright"
     "  --timeout SECONDS   how long to wait for the browser redirect (default: 300)"
-    "  --no-clipboard      print the login URL only, do not touch the clipboard"
-    "  -h, --help          this message"]))
+    "  -h, --help          this message"
+    ""
+    "The login URL is added to the current Emacs kill ring, never printed."]))
 
 (defn- die
   [code & lines]
@@ -70,7 +71,6 @@
         "--region" (recur (rest more) (assoc opts :region (first more)))
         "--timeout" (recur (rest more) (assoc opts :timeout (parse-long (str (first more)))))
         "--force" (recur more (assoc opts :force true))
-        "--no-clipboard" (recur more (assoc opts :no-clipboard true))
         (die 2 (str "unknown argument: " arg) usage)))))
 
 ;; ---------------------------------------------------------------------------
@@ -120,95 +120,62 @@
            (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss z")))
 
 ;; ---------------------------------------------------------------------------
-;; Terminal
+;; Emacs
 ;;
-;; /dev/tty is the obvious way to reach the terminal and it does not work here:
-;; a process with no controlling terminal gets ENXIO on open, and a `-w
-;; /dev/tty` test passes anyway because it only checks the device node's
-;; permission bits. So walk up the process tree instead and take the pty from
-;; the first ancestor that still has one.
-;;
-;; Two signals per process, because either alone has a blind spot. The fd links
-;; are exact but miss a shell whose stdio is piped; tty_nr is the controlling
-;; terminal, which such a shell still carries.
+;; Neoemacs puts its per-process server in $EDITOR as `emacsclient -s <name>`.
+;; Use that exact command rather than the default server: more than one Emacs
+;; may be running, and only the current one owns this shell's clipboard path.
 
-(defn- read-proc
-  "Slurp fails on /proc with EINVAL under babashka — those files report a size
-  of zero and want a single full read. Files/readAllBytes obliges."
-  [& parts]
-  (try
-    (String. (java.nio.file.Files/readAllBytes (apply fs/path "/proc" parts)) "UTF-8")
-    (catch Exception _ nil)))
-
-(defn- ppid
-  [pid]
-  (some->> (read-proc (str pid) "status")
-           str/split-lines
-           (some #(second (re-matches #"PPid:\s+(\d+)" %)))
-           parse-long))
-
-(defn- fd-terminal
-  "Terminal one of the process's standard fds is open on."
-  [pid]
-  (some (fn [fd]
-          (try
-            (let [link (fs/path "/proc" (str pid) "fd" (str fd))]
-              (when (fs/exists? link {:nofollow-links true})
-                (let [target (str (fs/read-link link))]
-                  (when (re-matches #"/dev/(pts/\d+|tty\d+|console)" target) target))))
-            (catch Exception _ nil)))
-        [0 1 2]))
-
-(defn- controlling-terminal
-  "Device named by field 7 of /proc/<pid>/stat, decoded from its dev_t. Field
-  counting starts after the comm field, which is parenthesised and may itself
-  contain spaces and brackets."
-  [pid]
-  (when-let [stat (read-proc (str pid) "stat")]
-    (let [after-comm (subs stat (inc (str/last-index-of stat ")")))
-          tty-nr (some-> (str/split (str/trim after-comm) #"\s+") (nth 4 nil) parse-long)]
-      (when (and tty-nr (pos? tty-nr))
-        (let [major (bit-and (bit-shift-right tty-nr 8) 0xfff)
-              minor (bit-or (bit-and tty-nr 0xff)
-                            (bit-and (bit-shift-right tty-nr 12) 0xfff00))]
-          (case major
-            136 (str "/dev/pts/" minor)
-            4 (str "/dev/tty" minor)
-            nil))))))
-
-(defn- terminal-device
-  "Device path of the nearest terminal up the process tree, or nil if nothing
-  in it owns one."
-  []
-  (loop [pid (.pid (java.lang.ProcessHandle/current)) depth 0]
-    (when (and pid (pos? pid) (< depth 16))
-      (or (fd-terminal pid)
-          (controlling-terminal pid)
-          (recur (ppid pid) (inc depth))))))
-
-(defn- osc52
-  "OSC 52 sequence setting the terminal's clipboard to text, wrapped for a
-  multiplexer if one is in the way."
-  [text]
-  (let [payload (.encodeToString (java.util.Base64/getEncoder) (.getBytes text "UTF-8"))
-        sequence (str "\u001b]52;c;" payload "\u0007")]
+(defn- socket-name
+  [argv]
+  (loop [[arg & more] argv]
     (cond
-      (System/getenv "TMUX") (str "\u001bPtmux;" (str/replace sequence "\u001b" "\u001b\u001b") "\u001b\\")
-      (System/getenv "STY") (str "\u001bP" sequence "\u001b\\")
-      :else sequence)))
+      (nil? arg) nil
+      (#{"-s" "--socket-name"} arg) (first more)
+      (str/starts-with? arg "--socket-name=") (subs arg (count "--socket-name="))
+      :else (recur more))))
 
-(defn- copy!
-  "Put text on the terminal's clipboard. Returns the device written to, or nil."
-  [text device]
-  (when device
-    (try
-      (with-open [out (java.io.FileOutputStream. (io/file device) true)]
-        (.write out (.getBytes (osc52 text) "UTF-8"))
-        (.flush out))
-      device
-      (catch Exception e
-        (println (str "  could not write to " device ": " (.getMessage e)))
-        nil))))
+(defn- emacs-eval
+  [{:keys [argv]} expression]
+  @(p/process (into argv ["--quiet" "--suppress-output" "--eval" expression])
+              {:in "" :out :string :err :string}))
+
+(defn- emacs-client!
+  "Parse $EDITOR, require its named Emacs server to answer, and return the
+  command to use. This runs before OCI starts so a missing clipboard channel
+  cannot leave an authentication process waiting on an undisclosed URL."
+  []
+  (let [editor (System/getenv "EDITOR")]
+    (when (str/blank? editor)
+      (die 1 "$EDITOR is not set, so there is no current Emacs server for the login URL."))
+    (let [argv (try
+                 (p/tokenize editor)
+                 (catch Exception _
+                   (die 1 "$EDITOR could not be parsed as a command.")))
+          server (socket-name argv)
+          program (first argv)]
+      (when-not (and program (= "emacsclient" (fs/file-name program)))
+        (die 1 "$EDITOR must invoke emacsclient."
+             (str "Found: " editor)))
+      (when (str/blank? server)
+        (die 1 "$EDITOR must name the current Emacs server with -s or --socket-name."
+             (str "Found: " editor)))
+      (when-not (fs/which program)
+        (die 1 (str "The emacsclient named by $EDITOR is not on PATH: " program)))
+      (let [client {:argv argv :server server}
+            {:keys [exit]} (emacs-eval client "t")]
+        (when-not (zero? exit)
+          (die 1 (str "The Emacs server named by $EDITOR is not available: " server)))
+        client))))
+
+(defn- yank!
+  "Add text to the current Emacs kill ring without placing the text itself in
+  emacsclient's result. Base64 keeps URL punctuation out of the Elisp source."
+  [client text]
+  (let [payload (.encodeToString (java.util.Base64/getEncoder) (.getBytes text "UTF-8"))
+        expression (str "(progn (kill-new (decode-coding-string "
+                        "(base64-decode-string " (pr-str payload) ") 'utf-8)) t)")]
+    (zero? (:exit (emacs-eval client expression)))))
 
 ;; ---------------------------------------------------------------------------
 ;; The oci CLI
@@ -255,14 +222,14 @@
 
 (defn- authenticate!
   "Drive the browser login flow, lifting the URL out of the CLI's own output as
-  it appears and putting it on the laptop's clipboard. The CLI prints that URL
-  on a line of its own; nothing else it emits starts with http."
-  [{:keys [profile region timeout no-clipboard]}]
+  it appears and adding it to the current Emacs kill ring. The CLI prints that
+  URL on a line of its own; nothing else it emits starts with http."
+  [{:keys [profile region timeout]}]
   (when-not (port-free? 8181)
     (die 1 "Port 8181 is already in use, and the login flow needs it."
          "Another `oci session authenticate` may still be waiting — check with:"
          "    ss -lptn 'sport = :8181'"))
-  (let [device (when-not no-clipboard (terminal-device))
+  (let [client (emacs-client!)
         proc (p/process ["oci" "session" "authenticate"
                          "--region" region
                          "--profile-name" profile]
@@ -273,15 +240,21 @@
                   (with-open [reader (io/reader stream)]
                     (doseq [line (line-seq reader)
                             :let [text (str/trim (strip-ansi line))]]
-                      (if (and (not @seen) (str/starts-with? text "http"))
+                      (if (and (str/starts-with? text "http")
+                               (compare-and-set! seen false true))
                         (do
-                          (reset! seen true)
+                          (when-not (yank! client text)
+                            ;; Nothing left to try — the URL is never printed,
+                            ;; so cancel rather than wait on a login no one can
+                            ;; start.
+                            (p/destroy-tree proc)
+                            (die 1 ""
+                                 "Emacs could not add the login URL to its kill ring, and it is"
+                                 "never printed. This login attempt has been cancelled."))
                           (println)
-                          (if-let [written (copy! text device)]
-                            (println (str "Login URL copied to your clipboard via OSC 52 (" written ")."))
-                            (println "Login URL (clipboard unavailable — copy it by hand):"))
-                          (println)
-                          (println text)
+                          (println (str "Login URL added to the kill ring of Emacs server "
+                                        (:server client) "."))
+                          (println "It is not printed here — the clipboard is the only channel.")
                           (println)
                           (println "Paste it into a browser on your laptop and complete the login.")
                           (println "The redirect lands on http://localhost:8181, which resolves on the")

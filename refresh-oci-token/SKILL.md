@@ -1,6 +1,6 @@
 ---
 name: refresh-oci-token
-description: Refresh the OCI CLI session token when it has expired or is about to. Use when a package-skill launcher (`./green`, `./walter`, …) running create/describe, or `tofu plan`, or any `oci` command fails with an authentication or 401 error, when `oci session validate` reports the session expired, or before starting a long create that would outlive the current token. Handles the headless browser login by putting the login URL on the laptop's clipboard with OSC 52.
+description: Refresh the OCI CLI session token when it has expired or is about to. Use when a package-skill launcher (`./green`, `./walter`, …) running create/describe, or `tofu plan`, or any `oci` command fails with an authentication or 401 error, when `oci session validate` reports the session expired, or before starting a long create that would outlive the current token. Handles the headless browser login by adding the login URL to the current Emacs server's kill ring.
 ---
 
 # Refresh the OCI session token
@@ -21,7 +21,7 @@ That is the whole thing. It picks the right path on its own:
 | Token expired | Browser login, because nothing else can renew it |
 
 Options: `--profile NAME`, `--region ID`, `--force` (skip the refresh path),
-`--timeout SECONDS` (default 300), `--no-clipboard`.
+`--timeout SECONDS` (default 300).
 
 `oci session authenticate --no-browser` is **not** a way to avoid the browser.
 It calls the token API with the credentials the profile already has, which on an
@@ -37,11 +37,18 @@ where `direnv allow` has been run.
 This host has no display and no browser; you are on it over SSH. Two things have
 to cross to the laptop, and only one of them is automatic.
 
-**The URL — automatic.** The script reads the login URL out of the CLI's output
-and writes an OSC 52 sequence to the terminal device, which asks the terminal
-emulator to set the clipboard. The emulator runs on the laptop, so the URL lands
-on the laptop's clipboard, ready to paste into a browser. It is printed as well,
-in case the terminal declines.
+**The URL — automatic.** The script reads the login URL out of the CLI's output,
+parses the current server from `$EDITOR` (`emacsclient -s <server>`), and asks
+that Emacs to evaluate `kill-new`. The URL lands in its kill ring and, through
+Emacs's clipboard integration, on the laptop's clipboard ready to paste into a
+browser.
+
+The clipboard is the **only** channel. The URL is never printed — not on any
+path, not under any flag, and there is no option that changes this. Before
+starting the OCI login, the script verifies that `$EDITOR` names an Emacs server
+with `-s` or `--socket-name` and that the server answers. A missing command,
+missing server, or failed `kill-new` is fatal rather than a fallback to the
+screen; if the failure happens after OCI starts, the login process is cancelled.
 
 **Port 8181 — yours to arrange.** The login redirects to
 `http://localhost:8181`, and `localhost` is resolved by the browser, on the
@@ -64,30 +71,19 @@ mid-flow does not work — start a second SSH session with the forward, then re-
 
 ## When it does not work
 
-**Nothing on the clipboard.** Paste the printed URL by hand, then look at what
-is actually holding the pty. The terminal on this machine is `ghostel` running
-inside Emacs (`INSIDE_EMACS=ghostel`), not Ghostty directly — Ghostty is only
-the outermost layer, across the SSH connection. Ghostel parses OSC 52 and then
-drops it unless enabled:
+**`$EDITOR` does not name a server.** Run this from a shell started by the
+current Neoemacs instance. Its `$EDITOR` has the form `emacsclient -s <server>`;
+the per-process server name is what prevents the script from handing the URL to
+a different Emacs instance.
 
-```elisp
-(setq ghostel-enable-osc52 t)   ; nil by default
-```
+**The Emacs server is unavailable.** The script checks it before starting OCI
+and aborts without printing the URL. Start the server or use a shell belonging
+to a live Neoemacs instance, then re-run.
 
-It is off by default on purpose — any command output can then overwrite the
-clipboard — and ghostel deliberately keeps OSC 52 out of its bundled terminfo,
-so nothing advertises the gap. The failure is completely silent: the sequence
-arrives, is parsed, and is discarded. A plain line written to the same device
-still shows up, which makes the write path look healthy.
-
-To enable it in a running session without restarting Emacs:
-
-```sh
-emacsclient -s "$(echo "$EDITOR" | sed 's/.*-s //')" -e '(setq ghostel-enable-osc52 t)'
-```
-
-Elsewhere the usual suspects apply: Ghostty's `clipboard-write` (defaults to
-`allow`, so rarely the problem), or tmux needing `set -g set-clipboard on`.
+**Emacs accepted `kill-new`, but nothing reached the laptop clipboard.** There
+is no printed copy to fall back on. Fix the current Emacs instance's clipboard
+integration, then re-run; the script can verify the server evaluation, but not
+the laptop clipboard itself.
 
 **Timed out waiting for the redirect.** Almost always the missing forward. The
 browser tab will be sitting on a connection error after an otherwise successful

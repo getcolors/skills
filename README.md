@@ -12,7 +12,7 @@ from wherever you happen to be standing.
 
 | Skill | What it does |
 |---|---|
-| [`refresh-oci-token`](refresh-oci-token/SKILL.md) | Renews the OCI CLI session token. Extends it in place while it is still valid; falls back to a browser login when it has expired, putting the login URL on your laptop's clipboard over OSC 52 so a headless host can complete the flow. |
+| [`refresh-oci-token`](refresh-oci-token/SKILL.md) | Renews the OCI CLI session token. Extends it in place while it is still valid; falls back to a browser login when it has expired, adding the login URL to the current Emacs server's kill ring so a headless host can complete the flow. |
 
 ## Install
 

@@ -86,16 +86,17 @@ Renews the session-token-based `DEFAULT` OCI profile that `once-colors/` and
 `walter-oci/` share. Oracle caps a session at 60 minutes and an expired token
 surfaces as an auth failure part-way into a `create`, not as a config error.
 Valid token → `oci session refresh` in place; expired → browser login, with the
-URL pushed to the laptop's clipboard over OSC 52 because this host is headless.
+URL added to the current Emacs server's kill ring because this host is headless.
 
 The script's header comment and the "When it does not work" section of its
 `SKILL.md` explain every workaround in it. Read them before touching the
 following, all of which look like dead weight and are not:
 
-- the `/proc` walk up the process tree to find a pty — `/dev/tty` gets ENXIO
-  under an agent tool, and testing it with `-w` passes anyway
-- `Files/readAllBytes` instead of `slurp` for `/proc` — slurp fails EINVAL there
-  under babashka
+- `$EDITOR` is tokenized and its `-s` / `--socket-name` is required — several
+  Emacs instances can run, and the current shell must choose the one that owns
+  its clipboard path
+- the Emacs server is checked before OCI starts, and a failed `kill-new` cancels
+  OCI — the URL is never printed, so there is no useful fallback
 - empty stdin on every `oci` call, and `--local` on every `session validate` — a
   prompt with no reader behind it hangs the caller
 - ANSI stripping — the CLI paints an alternate-buffer progress screen even when
