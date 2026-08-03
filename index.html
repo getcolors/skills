@@ -1,2 +1,24 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Machine-level agent skills for the Get Colors workspace."><title>Get Colors machine skills</title><style>:root{color-scheme:light dark;font:17px/1.6 system-ui,sans-serif}body{max-width:760px;margin:auto;padding:3rem 1.25rem}h1{font-size:clamp(2.5rem,8vw,5rem);margin:.2em 0}a{color:#36a269}code,pre{font-family:ui-monospace,monospace}pre{padding:1rem;overflow:auto;background:#8882;border-radius:.6rem}.tag{font-weight:700;color:#36a269}</style></head><body><main><p class="tag">MACHINE-LEVEL AGENT SKILLS</p><h1>skills</h1><p>Small, self-contained skills that fix workstation problems and depend only on tools available on <code>PATH</code>.</p><h2>refresh-oci-token</h2><p>Renews the OCI CLI session token, refreshing a valid session in place or guiding browser authentication after expiry on a headless machine.</p><pre><code>cp -r refresh-oci-token/ ~/.claude/skills/</code></pre><p>These are not Colors Package Skills. They do not provision projects, use <code>colors.yml</code>, or carry library SHA pins.</p><p><a href="https://github.com/getcolors/skills">Source and installation documentation</a></p></main></body></html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="description" content="Agent skills for the Get Colors workspace.">
+    <title>Get Colors agent skills</title>
+    <style>:root{color-scheme:light dark;font:17px/1.6 system-ui,sans-serif}body{max-width:760px;margin:auto;padding:3rem 1.25rem}h1{font-size:clamp(2.5rem,8vw,5rem);margin:.2em 0}h2{margin-top:2rem}a{color:#36a269}code,pre{font-family:ui-monospace,monospace}pre{padding:1rem;overflow:auto;background:#8882;border-radius:.6rem}.tag{font-weight:700;color:#36a269}</style>
+  </head>
+  <body>
+    <main>
+      <p class="tag">AGENT SKILLS</p>
+      <h1>skills</h1>
+      <p>Repeatable operating procedures for coding agents working with Colors.</p>
+      <h2>create-package-skill</h2>
+      <p>Guides an agent through creating a Package Skill and a deployment, from requirements and credential boundaries to tested, authorized deployment.</p>
+      <pre><code>npx skills use getcolors/skills@create-package-skill</code></pre>
+      <h2>refresh-oci-token</h2>
+      <p>Renews the OCI CLI session token on a configured Get Colors workstation.</p>
+      <p>These are Agent Skills, not Colors Package Skills. They do not provision projects directly or carry Colors library SHA pins.</p>
+      <p><a href="https://github.com/getcolors/skills">Source and full documentation</a></p>
+    </main>
+  </body>
+</html>

@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-`getcolors/skills` holds **machine-level agent skills** — ones that fix a problem
-with the workstation rather than with a project. Each is self-contained: it
-depends on what is on `PATH`, never on green/red/blue.
+`getcolors/skills` holds **Agent Skills** for the workspace. Some fix a
+workstation problem; `create-package-skill` supplies the guarded workflow for
+creating a Colors Package Skill and its deployment. They are not Package Skills
+and never depend on green/red/blue at runtime.
 
 Read `../CLAUDE.md` first. This checkout sits inside the `~/code/getcolors`
 workspace, and what that file says about the stack, `COLORS_PAR_*`, profiles and
-the shared OCI tenancy is the context these skills act on. This repo is not in
-its repository map yet.
+the shared OCI tenancy is the context these skills act on.
 
 ### Not the Package Skills
 
@@ -20,11 +20,11 @@ different mechanism and nothing here applies to them:
 
 | | this repo | `once/skills/`, `walter/skills/` |
 |---|---|---|
-| Named | `refresh-oci-token` | `package-once-green`, `package-walter-green` |
-| Scope | the machine — one `~/.oci/` session, whichever project you stand in | one project's desired state |
-| Installed to | `~/.claude/skills/<name>/`, by hand | `.agents/skills/` in a consumer project, by `npx skills add getcolors/<pkg>` |
-| Provenance | none — no lockfile, no SHA pin | `skills-lock.json`, source and content hash |
-| Ships | a standalone script | a launcher that resolves a SHA-pinned library |
+| Named | `create-package-skill`, `refresh-oci-token` | `package-once-green`, `package-walter-green` |
+| Scope | an agent workflow or workstation operation | one project's desired state |
+| Main use | `npx skills use getcolors/skills@create-package-skill` | `npx skills use getcolors/<pkg>@<skill>` |
+| Persistent install | only when a skill needs local files, such as `refresh-oci-token` | `.agents/skills/` via `npx skills add` |
+| Ships | instructions and, optionally, a standalone script | a launcher that resolves a SHA-pinned library |
 
 ## Layout
 
@@ -39,9 +39,15 @@ agent reads when deciding whether to invoke the skill, so it names symptoms —
 `401`, `session expired`, the commands that fail — rather than describing the
 mechanism. The prose body is what gets read afterwards.
 
-## The installed copy is a copy
+## Using create-package-skill
 
-`~/.claude/skills/<name>/` is a separate directory holding the same bytes, not a
+Use `npx skills use getcolors/skills@create-package-skill`. It fetches the
+workflow from GitHub and prints it for the agent's next request; it deliberately
+does not install anything in the current project.
+
+## The installed refresh-oci-token copy is a copy
+
+`~/.claude/skills/refresh-oci-token/` is a separate directory holding the same bytes, not a
 symlink into this checkout (verified by inode). **Editing here changes nothing
 the agent runs** until it is copied over:
 
@@ -110,5 +116,5 @@ the expired ones.
 
 Ordinary single-repo git — no SHA pins, no cross-layer coordination, so nothing
 like `bb pin`. Work on the current branch and do not commit or push unless
-explicitly asked. Pushing here does not update anything: the agent still reads
-`~/.claude/skills/`, so a change is only live once copied.
+explicitly asked. Pushing updates what a subsequent `npx skills use` reads. It does not update an
+installed `refresh-oci-token` copy; that skill is only live locally once copied.

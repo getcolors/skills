@@ -1,39 +1,41 @@
 # skills
 
-Machine-level agent skills for the [getcolors](https://github.com/getcolors)
-workspace — the ones that fix a problem with the *workstation* rather than with a
-project.
-
-Each skill is self-contained and depends only on what is on `PATH`. None of them
-depend on the Colors SDK, and none are tied to a particular checkout: run them
-from wherever you happen to be standing.
+Agent skills for the [getcolors](https://github.com/getcolors) workspace. They
+give coding agents repeatable operating procedures; they are not Colors Package
+Skills and do not provision a project from `colors.yml` themselves.
 
 ## Skills
 
 | Skill | What it does |
 |---|---|
+| [`create-package-skill`](create-package-skill/SKILL.md) | Guides an agent through creating a Colors Package Skill and a deployment, with explicit boundaries around credentials, infrastructure changes, and authorization. |
 | [`refresh-oci-token`](refresh-oci-token/SKILL.md) | Renews the OCI CLI session token. Extends it in place while it is still valid; falls back to a browser login when it has expired, adding the login URL to the current Emacs server's kill ring so a headless host can complete the flow. |
 
-## Install
+## Use create-package-skill
 
-Copy a skill into your personal skills directory:
+Give the skill to your coding agent for its next request:
+
+```sh
+npx skills use getcolors/skills@create-package-skill
+```
+
+This is the primary way to use it. The command reads the skill directly from
+GitHub and prints the instructions for the agent; it does not install files into
+the current project.
+
+## Install refresh-oci-token
+
+`refresh-oci-token` includes a script that must remain available after the skill
+is loaded, so install it into your personal skills directory:
 
 ```sh
 cp -r refresh-oci-token/ ~/.claude/skills/
-```
-
-Claude Code discovers it there and decides to invoke it from the `description` in
-the skill's frontmatter.
-
-The install is a **copy, not a symlink** — pulling this repo does not update an
-installed skill. After changing or updating one, copy it over again and confirm:
-
-```sh
 diff -r refresh-oci-token/ ~/.claude/skills/refresh-oci-token/
 ```
 
-Scripts run under [babashka](https://babashka.org/). `refresh-oci-token` also
-needs the `oci` CLI on `PATH`.
+The install is a **copy, not a symlink**. Pulling this repo does not update it.
+The script runs under [babashka](https://babashka.org/) and also needs the `oci`
+CLI on `PATH`.
 
 ## These are not Package Skills
 
