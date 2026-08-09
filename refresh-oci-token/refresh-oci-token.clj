@@ -82,9 +82,9 @@
   "Parse ~/.oci/config into {profile {key value}}. Only enough INI to find the
   region; the CLI itself is the authority on everything else."
   []
-  (when-not (fs/exists? config-file)
-    (die 2 (str "no OCI config at " config-file)))
-  (->> (str/split-lines (slurp config-file))
+  (if-not (fs/exists? config-file)
+    {}
+    (->> (str/split-lines (slurp config-file))
        (map str/trim)
        (remove #(or (str/blank? %) (str/starts-with? % "#")))
        (reduce (fn [{:keys [section] :as acc} line]
@@ -94,7 +94,7 @@
                      (cond-> acc
                        (and section v) (assoc-in [:profiles section (str/trim k)] (str/trim v))))))
                {})
-       :profiles))
+         :profiles)))
 
 (defn- token-file
   [profile]
@@ -298,15 +298,17 @@
       (die 2 "`oci` is not on PATH — run inside `devenv shell`, or `direnv allow` first."))
     (let [profiles (read-config)
           profile (or profile (System/getenv "OCI_CLI_PROFILE") "DEFAULT")
-          _ (when-not (contains? profiles profile)
-              (die 2 (format "profile %s is not in %s (found: %s)"
-                             profile config-file (str/join ", " (sort (keys profiles))))))
+          configured? (contains? profiles profile)
           region (or region
                      (get-in profiles [profile "region"])
-                     (die 2 (format "no region for profile %s — pass --region" profile)))
+                     (die 2 (format (if (fs/exists? config-file)
+                                      "no region for profile %s — pass --region"
+                                      "no OCI config at %s — pass --region to create profile %s")
+                                    (if (fs/exists? config-file) profile config-file)
+                                    (when-not (fs/exists? config-file) profile))))
           opts (assoc opts :profile profile :region region)]
       (println (format "Profile %s, region %s." profile region))
-      (if (and (not force) (session-valid? profile))
+      (if (and configured? (not force) (session-valid? profile))
         (do
           (println "Session is still valid — extending it in place, no browser needed.")
           (if (refresh! profile)
@@ -314,9 +316,10 @@
             (do (println "Refresh was rejected; falling back to a full login.")
                 (if (authenticate! opts) (report! profile) (System/exit 1)))))
         (do
-          (println (if force
-                     "Re-authenticating on request."
-                     "Session is expired or missing — a browser login is the only way back."))
+          (println (cond
+                     force "Re-authenticating on request."
+                     (not configured?) "Profile is not configured — starting first-time browser login."
+                     :else "Session is expired or missing — a browser login is the only way back."))
           (if (authenticate! opts) (report! profile) (System/exit 1)))))))
 
 ;; Only when run as a script, so the file can be loaded and its pieces

@@ -26,9 +26,23 @@ That is the whole thing. It picks the right authentication path on its own:
 |---|---|
 | Token still valid | `oci session refresh` extends it in place — no browser, nothing to do |
 | Token expired | Browser login, because nothing else can renew it |
+| `~/.oci/config` or the requested profile is missing | First-time browser login; pass `--region ID` because there is no configured region to infer |
 
 Options: `--profile NAME`, `--region ID`, `--force` (skip the refresh path),
 `--timeout SECONDS` (default 300).
+
+A missing `~/.oci/config` does **not** mean the OCI CLI is uninstalled. If the
+script reports that `oci` is on `PATH` but no configuration exists, bootstrap
+the `DEFAULT` session through the same safe URL-handling flow:
+
+```sh
+bb refresh-oci-token.clj --region <oci-region>
+```
+
+Use the deployment's OCI region when it is available in desired state or
+Terraform configuration; otherwise ask the user for it. Do not run bare
+`oci session authenticate`: unlike this script, it prints the login URL to the
+terminal instead of transferring it only through the current Emacs clipboard.
 
 `oci session authenticate --no-browser` is **not** a way to avoid the browser.
 It calls the token API with the credentials the profile already has, which on an
@@ -77,6 +91,11 @@ The forward has to exist *before* the login completes in the browser. Adding it
 mid-flow does not work — start a second SSH session with the forward, then re-run.
 
 ## When it does not work
+
+**`~/.oci/config` or the requested profile is missing.** This is a first-time
+setup, not evidence that OCI CLI is missing. Re-run with `--region ID`; the
+script will create the session profile through browser authentication. If the
+region cannot be determined from the project, ask the user.
 
 **`$EDITOR` does not name a server.** Run this from a shell started by the
 current Neoemacs instance. Its `$EDITOR` has the form `emacsclient -s <server>`;
