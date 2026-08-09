@@ -1,6 +1,6 @@
 ---
 name: refresh-oci-token
-description: Refresh the OCI CLI session token when it has expired or is about to. Use when a package-skill launcher (`./green`, `./walter`, …) running create/describe, or `tofu plan`, or any `oci` command fails with an authentication or 401 error, when `oci session validate` reports the session expired, or before starting a long create that would outlive the current token. Handles the headless browser login by adding the login URL to the current Emacs server's kill ring.
+description: Refresh the OCI CLI session token when it has expired or is about to. Use when a package-skill launcher (`./green`, `./red`, or `./blue`) running create/describe, or `tofu plan`, or any `oci` command fails with an authentication or 401 error, when `oci session validate` reports the session expired, or before starting a long create that would outlive the current token. Handles the headless browser login by adding the login URL to the current Emacs server's kill ring.
 ---
 
 # Refresh the OCI session token
