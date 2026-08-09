@@ -9,11 +9,18 @@ The `DEFAULT` OCI profile on this machine is session-token based, and Oracle
 caps a session at **60 minutes**. An expired token does not look like a config
 error — it surfaces as an auth failure at plan time, part-way into a `create`.
 
+Run the script relative to the directory containing this `SKILL.md`:
+
 ```sh
-bb ~/.claude/skills/refresh-oci-token/refresh-oci-token.clj
+bb refresh-oci-token.clj
 ```
 
-That is the whole thing. It picks the right path on its own:
+Resolve that relative path against the loaded skill's location before running
+it. Do not assume a particular agent's install root: Claude Code may load it
+below `~/.claude/skills`, Pi below `~/.pi/agent/skills`, and either path may
+itself be a symlink.
+
+That is the whole thing. It picks the right authentication path on its own:
 
 | State | What happens |
 |---|---|

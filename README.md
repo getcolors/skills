@@ -26,14 +26,13 @@ the current project.
 ## Install refresh-oci-token
 
 `refresh-oci-token` includes a script that must remain available after the skill
-is loaded, so install it into your personal skills directory:
+is loaded, so install the whole directory with your agent's skill mechanism.
+Install roots are agent-specific (for example, `~/.claude/skills/` for Claude
+Code and `~/.pi/agent/skills/` for Pi) and may be copies or symlinks into a
+shared personal skills directory. Pulling this repo does not necessarily update
+the installed skill; compare the directory at the location reported by your
+agent when troubleshooting.
 
-```sh
-cp -r refresh-oci-token/ ~/.claude/skills/
-diff -r refresh-oci-token/ ~/.claude/skills/refresh-oci-token/
-```
-
-The install is a **copy, not a symlink**. Pulling this repo does not update it.
 The script runs under [babashka](https://babashka.org/) and also needs the `oci`
 CLI on `PATH`.
 

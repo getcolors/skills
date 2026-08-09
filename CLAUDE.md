@@ -45,24 +45,18 @@ Use `npx skills use getcolors/skills@create-package-skill`. It fetches the
 workflow from GitHub and prints it for the agent's next request; it deliberately
 does not install anything in the current project.
 
-## The installed refresh-oci-token copy is a copy
+## The installed refresh-oci-token copy is separate
 
-`~/.claude/skills/refresh-oci-token/` is a separate directory holding the same bytes, not a
-symlink into this checkout (verified by inode). **Editing here changes nothing
-the agent runs** until it is copied over:
+The installed skill is not this checkout. **Editing here changes nothing the
+agent runs** until the skill is reinstalled or copied over. The install root is
+agent-specific: Claude Code commonly uses `~/.claude/skills/`, while Pi uses
+`~/.pi/agent/skills/`; either may point through a shared directory or symlink.
+Check the location reported by the agent before updating or comparing it.
 
-```sh
-cp -r refresh-oci-token/ ~/.claude/skills/
-diff -r refresh-oci-token/ ~/.claude/skills/refresh-oci-token/   # should be silent
-```
-
-Same trap the workspace has with package launchers, and it fails the same silent
-way: the agent keeps running the old version while the checkout looks right. Run
-the `diff` before concluding a change did not take effect.
-
-Because of this, a `SKILL.md` documents the **installed** path
-(`bb ~/.claude/skills/…`) rather than a path in this checkout. That is deliberate
-— leave it.
+A `SKILL.md` must therefore refer to its script relative to the loaded
+`SKILL.md`, not hard-code an agent-specific install root. Agents are expected to
+resolve that relative reference against the skill directory before invoking the
+script.
 
 ## Commands
 
