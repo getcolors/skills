@@ -110,3 +110,13 @@ The task is complete only when:
 - post-deployment health checks demonstrate that the deployed environment and its intended service are operational;
 - relevant documentation accurately describes usage and recovery;
 - both GitHub repositories exist in the `getcolors` organization and all authorized changes have been pushed.
+
+## Optional catalog submission
+
+Catalog publication is separate from creation and deployment. Do not publish automatically. After the definition of done is satisfied, mention this optional next step only if the user authorized making the Package Skill public:
+
+```sh
+npx skills use getcolors/skills@submit-package-skill
+```
+
+That Agent Skill validates the completed Package Skill against the catalog definition and opens a recipe PR. It is also the submission path for existing Package Skills, so do not duplicate its workflow here.
