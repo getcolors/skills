@@ -100,6 +100,27 @@ fails on a TTL expression.
 **Fix.** Track the `clickhouse-server` version upstream pins. See
 `references/pins.md`.
 
+### ClickHouse refuses connections from every other container
+
+**Symptom.** ClickHouse is healthy and answers `clickhouse-client` *inside* its
+own container. Every other service gets connection refused on 9000 or 8123.
+
+**Cause.** The server is listening on loopback only. The images ship a
+`listen_host` of `0.0.0.0` as one entry among several in their own
+`config.d/`, and replacing the configuration wholesale — a single monolithic
+`config.xml`, or bind-mounting over the whole `config.d` directory — silently
+drops it along with everything else the image set.
+
+**Fix.** Mount **individual files** into `/etc/clickhouse-server/config.d/`, as
+the bundled assets do, so the image's own entries survive alongside yours. If
+you must replace the configuration, declare `<listen_host>0.0.0.0</listen_host>`
+yourself.
+
+Note this is a different failure from the loopback `remote_servers` entry above,
+and the two are easy to confuse: that one advertises a bad address to *other*
+nodes through `system.clusters`, this one means the server never accepted the
+connection at all.
+
 ### `Unknown table expression identifier 'system.crash_log'`
 
 **Symptom.** 145 tables in, `migrate_clickhouse` fails on a system table.
@@ -448,6 +469,26 @@ the archive has already superseded, and with `cache_valid_time` set Ansible
 skips the update and goes straight to a 404.
 
 **Fix.** Always refresh apt lists; no `cache_valid_time`.
+
+### Containers cannot reach each other on Ubuntu 24.04
+
+**Symptom.** Docker starts, containers start, and networking between them does
+not work — or the daemon fails to set up its own rules at all.
+
+**Cause.** Ubuntu 24.04 defaults to the `nftables` iptables backend, and Docker
+expects the legacy one.
+
+**Fix.** Point both alternatives at legacy before installing or starting Docker:
+
+```sh
+update-alternatives --set iptables  /usr/sbin/iptables-legacy
+update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+```
+
+This has not been needed on every image — the getcolors package converges on
+`ubuntu-24-04-x64` without it — so treat it as the first thing to check when
+container-to-container networking misbehaves on a fresh 24.04 host rather than
+as an unconditional step.
 
 ### Ansible pointed at TEST-NET
 
