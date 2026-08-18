@@ -9,6 +9,7 @@ Skills and do not provision a project from `colors.yml` themselves.
 | Skill | What it does |
 |---|---|
 | [`create-package-skill`](create-package-skill/SKILL.md) | Guides an agent through creating a Colors Package Skill and a deployment, with explicit boundaries around credentials, infrastructure changes, and authorization. |
+| [`posthog-single-node`](posthog-single-node/SKILL.md) | Carries the PostHog-specific knowledge a single-node deployment needs: the ten-container topology, the ClickHouse Keeper, macro and named-collection configuration its migrations require, the capture/plugin-server ingestion chain, converge ordering, and a catalogue of ~30 failures that each report success. Ships the working files and a validator. |
 | [`submit-package-skill`](submit-package-skill/SKILL.md) | Validates an existing Package Skill and opens the recipe PR that submits it to the getcolors.ai Package Skills Catalog. |
 | [`refresh-oci-token`](refresh-oci-token/SKILL.md) | Renews the OCI CLI session token. Extends it in place while it is still valid; falls back to a browser login when it has expired, adding the login URL to the current Emacs server's kill ring so a headless host can complete the flow. |
 
@@ -68,7 +69,15 @@ for it.
 <skill-name>/
     SKILL.md              frontmatter (`name`, `description`), then the prose
     <skill-name>.clj      the script, when there is one
+    references/           docs the agent reads on demand, not up front
+    assets/               working files it copies and adapts
+    scripts/              checks and helpers it runs
 ```
+
+Most skills here are just `SKILL.md`. The three optional directories exist for a
+skill carrying more than an agent should hold in context at once: keep `SKILL.md`
+the map, and point at `references/` for the detail. `posthog-single-node` is the
+one that uses them.
 
 The `description` is routing text: it is all an agent sees when deciding whether
 the skill applies, so name the symptoms someone would actually hit — the error

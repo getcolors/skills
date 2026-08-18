@@ -1,0 +1,69 @@
+{
+  "skill_name": "posthog-single-node",
+  "evals": [
+    {
+      "id": 0,
+      "name": "compose-topology",
+      "prompt": "we're moving off posthog cloud to save money and i've got a spare 8gb droplet on digitalocean. can you write me the docker-compose.yml to self-host posthog on it? i want the analytics UI working and event ingestion working from our website. postgres and clickhouse on the same box is fine, it's a small team",
+      "expected_output": "A docker-compose.yml containing the full ten-service topology: db, redis, kafka/redpanda, clickhouse, temporal, capture, plugins (posthog-node), web, worker, caddy. Should not present a 4-service stack as sufficient.",
+      "files": [],
+      "assertions": [
+        "Includes a Kafka-compatible broker (Redpanda or Kafka) as a service",
+        "Includes the standalone capture service for event ingestion",
+        "Includes the plugin server (posthog-node) as a service distinct from web and worker",
+        "Includes Temporal",
+        "Provides ReplicatedMergeTree coordination (ClickHouse Keeper or ZooKeeper)",
+        "Pins the application and plugin server to the same commit or tag",
+        "Does not present a broker-less stack as sufficient for ingestion"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "dropped-events-debug",
+      "prompt": "been stuck on this for hours. self-hosted posthog on one server, docker compose. our JS snippet fires and the /capture/ endpoint returns 200 every time, i can see it in the network tab. but zero events show up in the posthog UI and when i query clickhouse directly the events table is empty. web and worker containers are both up, docker compose ps says everything is running. what am i missing?",
+      "expected_output": "Should identify the capture -> Kafka -> plugin-server -> ClickHouse chain, and diagnose plugin-server silent-exit causes correctly. Must NOT advise unsetting PLUGIN_SERVER_MODE, which causes a zero exit rather than an all-capability server.",
+      "files": [],
+      "assertions": [
+        "Identifies the capture -> Kafka -> plugin-server -> ClickHouse ingestion chain",
+        "States that a 200 from /capture/ only proves the event reached capture, not storage",
+        "States that an unset PLUGIN_SERVER_MODE causes a clean zero exit rather than a default all-capability server",
+        "Does NOT advise unsetting PLUGIN_SERVER_MODE or PLUGIN_SERVER_CAPABILITIES as a fix",
+        "Names a plugin-server failure that is only visible after raising the log level above info",
+        "Names at least two of: GeoIP database missing, Redis clients falling back to loopback, ENCRYPTION_SALT_KEYS unset, application/plugin-server commit mismatch",
+        "Warns that 'docker compose ps running' is not evidence a process is working"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "converge-playbook-ordering",
+      "prompt": "i need an ansible playbook that takes a fresh ubuntu 24.04 box and brings up a single-node posthog with docker compose, including running all the migrations so the thing is actually usable at the end. it needs to be idempotent - i'll be running it repeatedly as i iterate on the config. assume the compose file and clickhouse configs already exist as templates i'll be copying over",
+      "expected_output": "Playbook starting datastores only before migrating, SYSTEM FLUSH LOGS before migrate_clickhouse, migrate with the application down, container recreation keyed on what the server actually loaded rather than Ansible change flags, async migration handling to unblock Celery, and a long health-gate timeout.",
+      "files": [],
+      "assertions": [
+        "Starts the datastores before the application rather than the whole stack at once",
+        "Runs manage.py migrate with the application container down",
+        "Runs SYSTEM FLUSH LOGS before migrate_clickhouse",
+        "Keys container recreation on state observed from the server, not Ansible change flags",
+        "Handles async migrations so Celery can start",
+        "Sets a health-gate timeout substantially longer than five minutes",
+        "Playbook parses as valid YAML"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "pin-bump",
+      "prompt": "our self-hosted posthog has been pinned to the same posthog/posthog image since last august and i want to move it forward to something current before we onboard another team onto it. it's working fine right now which is exactly why i'm nervous. what do i actually need to be careful about here, and what's the order of operations?",
+      "expected_output": "Should require the application and plugin server to move to one shared commit, check the ClickHouse version upstream pins, re-resolve the capture digest, regenerate the schema checkpoint, and re-verify end to end rather than trusting a health endpoint.",
+      "files": [],
+      "assertions": [
+        "Requires the application and plugin server to move to the same commit",
+        "Says to check which ClickHouse version upstream pins at the target commit",
+        "Says to re-resolve the capture image digest because its tag moves",
+        "Says a schema checkpoint from a different commit must be regenerated or will be refused",
+        "Warns about a schema/consumer column mismatch of the posthog_person.last_seen_at kind",
+        "Requires end-to-end event verification rather than trusting a health endpoint",
+        "Gives an explicit order of operations"
+      ]
+    }
+  ]
+}
