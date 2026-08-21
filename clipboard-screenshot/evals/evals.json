@@ -1,0 +1,52 @@
+{
+  "skill_name": "clipboard-screenshot",
+  "evals": [
+    {
+      "id": 0,
+      "name": "explicit-clipboard-request",
+      "prompt": "grab whatever's on my clipboard right now and tell me what it shows",
+      "expected_output": "Retrieves the image from /tmp/clipboard.sock, saves it with a correct image extension, reads it, and describes the actual contents (a dark terminal screenshot showing shell output about CLAUDE.md/devenv.nix, a package skill symlink, an ssh IdentityFile ~/.ssh/walter-liliana, and OCI instance details).",
+      "files": [],
+      "assertions": [
+        "Retrieved the clipboard image and saved it as a file in the outputs directory",
+        "Named the saved file with an extension matching its real format (PNG bytes saved as .png)",
+        "The saved image is the clipboard's actual content, byte for byte (not some other image found on disk)",
+        "Reply cites details visible only in the screenshot itself (e.g. walter-liliana, ssh-authorized-keys, A2.Flex, the package-skill symlink)",
+        "Reply never asks the user to supply the image because the agent could not obtain it (attach, save to disk, paste, or describe it)",
+        "Reply describes what the screenshot shows, not merely that a file was saved"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "implied-copy-with-followup-task",
+      "prompt": "i copied a screenshot of my terminal - theres something in there about ssh keys, can you find it and explain what its setting up?",
+      "expected_output": "Grabs and reads the image without being told how, confirms what the screenshot shows, then answers the actual question about the ssh key lines (IdentityFile ~/.ssh/walter-liliana, ssh-authorized-keys) rather than speaking generically about ssh.",
+      "files": [],
+      "assertions": [
+        "Retrieved the clipboard image and saved it as a file in the outputs directory",
+        "Named the saved file with an extension matching its real format (PNG bytes saved as .png)",
+        "The saved image is the clipboard's actual content, byte for byte (not some other image found on disk)",
+        "Reply cites details visible only in the screenshot itself (e.g. walter-liliana, ssh-authorized-keys, A2.Flex, the package-skill symlink)",
+        "Reply never asks the user to supply the image because the agent could not obtain it (attach, save to disk, paste, or describe it)",
+        "Reply states what the screenshot shows before answering the ssh question",
+        "Answers the ssh question from the actual lines in the screenshot (IdentityFile ~/.ssh/walter-liliana and/or ssh-authorized-keys), not generic ssh advice"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "screenshot-no-clipboard-mention",
+      "prompt": "just took a screenshot of the thing i'm stuck on. what do you make of it?",
+      "expected_output": "Infers that the screenshot is reachable via the clipboard bridge and grabs it, instead of asking the user to attach or save the file. Describes what it sees before interpreting.",
+      "files": [],
+      "assertions": [
+        "Retrieved the clipboard image and saved it as a file in the outputs directory",
+        "Named the saved file with an extension matching its real format (PNG bytes saved as .png)",
+        "The saved image is the clipboard's actual content, byte for byte (not some other image found on disk)",
+        "Reply cites details visible only in the screenshot itself (e.g. walter-liliana, ssh-authorized-keys, A2.Flex, the package-skill symlink)",
+        "Reply never asks the user to supply the image because the agent could not obtain it (attach, save to disk, paste, or describe it)",
+        "Consulted the clipboard bridge even though the user never said the word 'clipboard'",
+        "Describes the screenshot before speculating about what the user is stuck on"
+      ]
+    }
+  ]
+}
