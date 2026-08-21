@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Rybbit backup: Postgres dump + ClickHouse BACKUP, proven restorable, uploaded
+# to S3-compatible object storage, with retention applied to both copies.
+#
+# Rendered by main.yml with ansible.builtin.template. Credentials arrive from
+# /etc/rybbit-backup.env via the systemd unit's EnvironmentFile.
+set -euo pipefail
+cd /opt/rybbit
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+mkdir -p {{ rybbit_backup_dir }}
+tmp_dir=$(mktemp -d /tmp/rybbit-backup-XXXXXX)
+
+set -a
+[ -f /opt/rybbit/stack.env ] && source /opt/rybbit/stack.env
+set +a
+
+# --- PostgreSQL --------------------------------------------------------------
+
+docker compose exec -T postgres pg_dump \
+  -U "${POSTGRES_USER:-rybbit}" -d "${POSTGRES_DB:-rybbit}" > "$tmp_dir/postgres.sql"
+
+# --- ClickHouse --------------------------------------------------------------
+#
+# ClickHouse's own BACKUP statement produces a consistent archive. Taring the
+# data directory while the server runs races its merges -- parts vanish mid-read
+# -- and yields an archive that cannot be restored, so there is deliberately no
+# fallback: a failed ClickHouse backup must fail the whole run. File()
+# destinations must sit under the server's backups.allowed_path, which is on the
+# bind mount and therefore visible from the host.
+
+docker compose exec -T -u root clickhouse sh -c \
+  'mkdir -p /var/lib/clickhouse/backups && chown clickhouse:clickhouse /var/lib/clickhouse/backups'
+docker compose exec -T clickhouse clickhouse-client \
+  --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" \
+  --query "BACKUP DATABASE ${CLICKHOUSE_DB:-rybbit} TO File('/var/lib/clickhouse/backups/clickhouse-$stamp.zip')"
+mv "{{ clickhouse_data_dir }}/backups/clickhouse-$stamp.zip" "$tmp_dir/clickhouse.zip"
+
+# --- Prove the dump restores -------------------------------------------------
+#
+# An archive that exists is not an archive that restores. Load the dump into a
+# scratch database and require the schema back, before the upload, so a
+# truncated or malformed dump fails the unit instead of sitting in the bucket
+# looking like a backup.
+
+check_db="rybbit_restore_check_$stamp"
+cleanup_check() {
+  docker compose exec -T postgres psql -U "${POSTGRES_USER:-rybbit}" -d postgres -q \
+    -c "DROP DATABASE IF EXISTS \"$check_db\"" >/dev/null 2>&1 || true
+}
+trap 'cleanup_check; rm -rf "$tmp_dir"' EXIT
+
+docker compose exec -T postgres psql -U "${POSTGRES_USER:-rybbit}" -d postgres -q -v ON_ERROR_STOP=1 \
+  -c "CREATE DATABASE \"$check_db\""
+docker compose exec -T postgres psql -U "${POSTGRES_USER:-rybbit}" -d "$check_db" -q -v ON_ERROR_STOP=1 \
+  < "$tmp_dir/postgres.sql" >/dev/null
+tables=$(docker compose exec -T postgres psql -U "${POSTGRES_USER:-rybbit}" -d "$check_db" -tAc \
+  "select count(*) from information_schema.tables where table_schema = 'public'" | tr -d '[:space:]')
+if [ "${tables:-0}" -lt 1 ]; then
+  echo "restore check restored no tables from postgres.sql" >&2
+  exit 1
+fi
+
+tar -czf "{{ rybbit_backup_dir }}/rybbit-$stamp.tar.gz" -C "$tmp_dir" .
+
+# --- Upload and retention ----------------------------------------------------
+
+export RCLONE_CONFIG_R2_TYPE=s3
+export RCLONE_CONFIG_R2_PROVIDER=Cloudflare
+export RCLONE_CONFIG_R2_REGION=auto
+export RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
+export RCLONE_CONFIG_R2_ACCESS_KEY_ID="$BACKUP_ACCESS_KEY_ID"
+export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$BACKUP_SECRET_ACCESS_KEY"
+export RCLONE_CONFIG_R2_ENDPOINT="{{ backup_endpoint }}"
+
+rclone copyto "{{ rybbit_backup_dir }}/rybbit-$stamp.tar.gz" \
+  "r2:{{ backup_bucket }}/{{ deployment_name }}/rybbit-$stamp.tar.gz"
+
+# Retention has to apply to the bucket, not only to this disk: pruning locally
+# while object storage keeps every object forever is not a retention policy.
+rclone delete --min-age {{ backup_retention_days }}d "r2:{{ backup_bucket }}/{{ deployment_name }}"
+
+find {{ rybbit_backup_dir }} -type f -name 'rybbit-*.tar.gz' -mtime +{{ backup_retention_days }} -delete

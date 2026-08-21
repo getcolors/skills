@@ -1,0 +1,70 @@
+{
+  "skill_name": "rybbit-single-node",
+  "evals": [
+    {
+      "id": 0,
+      "name": "vultr-port",
+      "prompt": "we've got rybbit self-hosted on a digitalocean droplet and it's been fine but we're consolidating everything onto vultr for billing reasons. i need to stand up the same thing there. what actually has to change? i've got the ansible playbook and docker-compose from the current box, plus the terraform for the droplet and firewall. trying to work out how much of this i'm rewriting",
+      "expected_output": "Should identify that only the provider layer changes: the playbook, compose stack, Caddyfile and backup are provider-independent. Should name the concrete Vultr differences - main_ip not ipv4_address, firewall group plus one rule per protocol/ip_type/port with subnet and subnet_size split, no outbound rules to write - and warn that setting hostname on vultr_instance is force-new (an OS reinstall) so the playbook should own the hostname.",
+      "files": [],
+      "assertions": [
+        "States that the Ansible playbook and compose stack need no provider-specific changes",
+        "Names main_ip as the Vultr address attribute rather than ipv4_address",
+        "States that Vultr firewall rules are separate resources, one per protocol/ip_type/port",
+        "States that Vultr splits a CIDR into subnet and subnet_size rather than taking a CIDR string",
+        "Warns that changing hostname on vultr_instance forces replacement / reinstalls the OS",
+        "Mentions that trusted_proxies must still describe whatever proxies the origin",
+        "Does NOT claim the whole stack must be rewritten for the new provider"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "config-change-no-effect",
+      "prompt": "losing my mind here. i edited the Caddyfile on our rybbit box to add a header, ran the ansible playbook, it said changed. i cat the file on the host and my edit is right there. curl the site and the header is not there. restarted caddy, still nothing. docker compose ps says caddy is up and healthy. this is the third config change today that hasn't taken. what is going on",
+      "expected_output": "Should diagnose the single-file bind mount inode trap: copy replaces by rename, the running container keeps its original inode, and docker compose up -d will not recreate a service whose definition is unchanged. Fix is to compare the checksum the container is actually serving and force-recreate on that. Should also flag that env_file has the analogous problem.",
+      "files": [],
+      "assertions": [
+        "Identifies that the container is serving the original inode because the bind mount is a single file replaced by rename",
+        "States that docker compose up -d will not recreate a service whose definition has not changed",
+        "Recommends comparing state observed from the running container rather than trusting Ansible's changed flag",
+        "Recommends an explicit force-recreate of the affected service",
+        "Warns that a restart alone is insufficient",
+        "Does NOT attribute the problem to Caddy configuration syntax or caching"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "backup-and-verify",
+      "prompt": "i need a backup script for our self-hosted rybbit box - postgres and clickhouse both, uploaded to cloudflare r2 nightly with about a week of retention. and honestly i want to be confident it actually works, we got burned before by a backup that turned out to be garbage when we needed it. ubuntu, docker compose, everything under /opt/rybbit",
+      "expected_output": "Should use ClickHouse's BACKUP statement rather than taring the data directory, with no fallback; write to a path under backups.allowed_path that is on the bind mount; verify the Postgres dump restores into a scratch database before uploading; and apply retention to the bucket as well as the local disk.",
+      "files": [],
+      "assertions": [
+        "Obtains the ClickHouse archive through the running server - the native BACKUP statement or clickhouse-client format dumps - rather than by taring or copying the live data directory",
+        "Explains why a filesystem copy of a running ClickHouse server is unsafe: it races the server's merges and yields an archive that cannot be restored",
+        "Handles the constraint that a native BACKUP destination must be under the server's backups.allowed_path, either by satisfying it or by explaining it as the reason for choosing another mechanism",
+        "Verifies the archive restores, rather than only producing one and checking its exit code",
+        "Applies retention to the remote bucket, not only the local disk",
+        "Does NOT fall back to copying the live data directory when the primary ClickHouse backup path fails",
+        "Detects the case where the backup never ran at all, rather than only checking runs that did happen",
+        "Script is valid bash"
+      ],
+      "assertion_notes": "Assertions 1, 3 and 6 were reworded after iteration 1, where they encoded the native BACKUP statement as the requirement rather than the property it delivers - a per-table Native dump read through the running server is equally merge-safe and was being marked as a failure. Assertion 7 was added: both arms independently built did-it-run detection that nothing scored. Iteration-1 pass rates were measured against the original wording and are not comparable to later runs."
+    },
+    {
+      "id": 3,
+      "name": "accepts-but-stores-nothing",
+      "prompt": "self-hosted rybbit, single box, docker compose behind caddy. the tracking script on our site fires and /api/track comes back 200 in the network tab every time. dashboard shows zero events. all six containers healthy. i wrote a quick check that posts an event and asserts a 200 and it passes so i assumed ingestion was fine, but obviously something is wrong. where do i even start",
+      "expected_output": "Should state that a 2xx from /api/track proves acceptance not storage, and that the check asserting a 200 cannot detect this failure. Should direct at reading the count back out of the ClickHouse events table, resolving the table from system.tables, polling because ingestion is async, and distinguishing dropped from rejected. Should raise the experimental JSON types as a likely cause of the schema not being usable.",
+      "files": [],
+      "assertions": [
+        "States that a 2xx from /api/track proves the request was accepted, not that a row was stored",
+        "Says the existing 200-asserting check cannot fail in this scenario and is therefore not evidence",
+        "Recommends counting rows in the ClickHouse events table before and after a synthetic event",
+        "Recommends polling rather than sampling once, because ingestion is asynchronous",
+        "Distinguishes a dropped event (2xx, no row) from a rejected one (non-2xx)",
+        "Mentions resolving the events table from system.tables rather than hardcoding a database name",
+        "Names at least one concrete likely cause, such as the experimental JSON/object types being disabled"
+      ]
+    }
+  ]
+}
