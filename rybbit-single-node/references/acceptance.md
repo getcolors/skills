@@ -63,10 +63,15 @@ healthy stack look broken when you get them wrong:
 - **`site_id` is a string.** It is `z.string()`, so the bare number is rejected
   and your check reports `rejected` against a working deployment.
 
-Send it with an ordinary **browser User-Agent**. Sites default to `blockBots:
-true`, and a request classified as a bot is answered `200` with the event
-diverted away from the events table — so a `curl/8.x` agent produces a `dropped`
-verdict that looks exactly like a broken pipeline.
+Send it with a **Mozilla-prefixed User-Agent that claims no specific browser**,
+such as `Mozilla/5.0 (Colors acceptance)`. Sites default to `blockBots: true`,
+and a request classified as a bot is answered `200` with the event diverted
+away from the events table — so a `curl/8.x` agent produces a `dropped` verdict
+that looks exactly like a broken pipeline. Do not masquerade as a real browser
+either: a claimed-Chrome UA without Chrome's client-hint headers trips the
+header heuristics, which stack with the datacenter-ASN signal a synthetic check
+usually carries — observed live, the fake-Chrome request was diverted while the
+plain Mozilla string from the same host was stored.
 
 Distinguish the outcomes, because they point at different layers:
 

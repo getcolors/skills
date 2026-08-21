@@ -13,6 +13,20 @@
 #   BACKUP_BUCKET=rybbit-backup BACKUP_ENDPOINT=https://... \
 #   ./acceptance.sh
 #
+# The backup check reads the credentials the backup unit itself uses, from the
+# EnvironmentFile on the host. The defaults match the bundled Ansible; a stack
+# converged by something else may write the same file with different variable
+# names (the getcolors rybbit package uses RYBBIT_BACKUP_R2_ACCESS_KEY_ID /
+# RYBBIT_BACKUP_R2_SECRET_ACCESS_KEY), so the file path and both names are
+# overridable:
+#
+#   BACKUP_ENV_FILE=/etc/rybbit-backup.env \
+#   BACKUP_KEY_ID_VAR=BACKUP_ACCESS_KEY_ID \
+#   BACKUP_SECRET_VAR=BACKUP_SECRET_ACCESS_KEY
+#
+# Getting them wrong fails the right way -- an empty listing and a FAILED
+# verdict -- but against a deployment whose backups are actually fine.
+#
 # Exit 0 only if every check passed.
 
 set -uo pipefail
@@ -24,6 +38,9 @@ ACCEPTANCE_DOMAIN=${ACCEPTANCE_DOMAIN:-colors-acceptance.invalid}
 BACKUP_BUCKET=${BACKUP_BUCKET:-}
 BACKUP_ENDPOINT=${BACKUP_ENDPOINT:-}
 BACKUP_PREFIX=${BACKUP_PREFIX:-rybbit}
+BACKUP_ENV_FILE=${BACKUP_ENV_FILE:-/etc/rybbit-backup.env}
+BACKUP_KEY_ID_VAR=${BACKUP_KEY_ID_VAR:-BACKUP_ACCESS_KEY_ID}
+BACKUP_SECRET_VAR=${BACKUP_SECRET_VAR:-BACKUP_SECRET_ACCESS_KEY}
 HEALTH_ATTEMPTS=${HEALTH_ATTEMPTS:-60}
 INGEST_ATTEMPTS=${INGEST_ATTEMPTS:-10}
 
@@ -112,12 +129,20 @@ select site_id from sites where domain = \$\$$ACCEPTANCE_DOMAIN\$\$ limit 1" \
     #     number is rejected, and the check then reports "rejected" against a
     #     perfectly healthy stack -- a false alarm that looks like a real one.
     #
-    # The User-Agent is deliberately an ordinary browser string: sites default
-    # to blockBots true, and a UA classified as a bot is answered 200 with no
-    # row stored, which is indistinguishable from a broken pipeline.
+    # The User-Agent matters because sites default to blockBots true, and a UA
+    # classified as a bot is answered 200 with no row stored, which is
+    # indistinguishable from a broken pipeline. An earlier version masqueraded
+    # as desktop Chrome, and that is exactly wrong for a synthetic check:
+    # observed live on 2026-08-21, a claimed-Chrome UA arriving with none of a
+    # real Chrome's client-hint headers scored header_heuristics, stacked with
+    # bot_asn (checks run from datacenter addresses), and the event was
+    # silently diverted. A Mozilla-prefixed string that claims no specific
+    # browser trips neither the UA patterns nor the header heuristics, and one
+    # ASN signal alone does not cross the threshold -- that combination was
+    # stored and read back.
     status=$(curl -sS -o /dev/null -w '%{http_code}' \
       -X POST -H 'content-type: application/json' \
-      -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36' \
+      -H 'User-Agent: Mozilla/5.0 (Colors acceptance)' \
       --data "{\"type\":\"pageview\",\"site_id\":\"$site\",\"pathname\":\"/colors-acceptance\"}" \
       "$base/api/track" 2>/dev/null)
 
@@ -159,9 +184,9 @@ else
     rclone_env="RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
 RCLONE_CONFIG_R2_REGION=auto RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
 RCLONE_CONFIG_R2_ENDPOINT=$BACKUP_ENDPOINT"
-    listing=$(remote "set -a; . /etc/rybbit-backup.env; set +a; $rclone_env \
-      RCLONE_CONFIG_R2_ACCESS_KEY_ID=\"\$BACKUP_ACCESS_KEY_ID\" \
-      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=\"\$BACKUP_SECRET_ACCESS_KEY\" \
+    listing=$(remote "set -a; . $BACKUP_ENV_FILE; set +a; $rclone_env \
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID=\"\$$BACKUP_KEY_ID_VAR\" \
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=\"\$$BACKUP_SECRET_VAR\" \
       rclone lsjson --files-only r2:$BACKUP_BUCKET/$BACKUP_PREFIX")
 
     # A non-empty object newer than the timestamp taken before the trigger.

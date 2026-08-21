@@ -128,13 +128,20 @@ endpoint a fingerprinting oracle, so success is the deliberate design — which
 means a bot-classified request is indistinguishable from a broken pipeline at
 the HTTP layer.
 
-**Fix.** Send an ordinary browser User-Agent from any synthetic check. A bare
-`curl/8.x` is a plausible detection, and so is a "helpful" custom agent naming
-your tooling. When a check reports `dropped`, rule this out **first** — it is
-cheaper than everything else on the list and it is the one cause that leaves no
-error anywhere.
+**Fix.** Send a Mozilla-prefixed User-Agent that claims no specific browser —
+`Mozilla/5.0 (Colors acceptance)` is the one verified live. A bare `curl/8.x`
+is a plausible detection; masquerading as a real browser is **worse**, not
+better: a claimed-Chrome UA arriving without a real Chrome's client-hint
+headers scores the header heuristics, that stacks with the ASN signal when the
+check runs from a datacenter address, and the combination crosses the
+threshold. Observed 2026-08-21 on a live deployment — the Chrome-masquerading
+request was diverted while the plain Mozilla string from the same host was
+stored and read back. When a check reports `dropped`, rule this out **first** —
+it is cheaper than everything else on the list and it is the one cause that
+leaves no error anywhere.
 
-Verified against upstream source, not inferred.
+The classification internals were verified against upstream source; the
+UA-choice outcome above was observed against a running deployment.
 
 ### Acceptance wrote test rows into production analytics
 
