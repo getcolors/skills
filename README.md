@@ -10,7 +10,9 @@ Skills and do not provision a project from `colors.yml` themselves.
 |---|---|
 | [`create-package-skill`](create-package-skill/SKILL.md) | Guides an agent through creating a Colors Package Skill and a deployment, with explicit boundaries around credentials, infrastructure changes, and authorization. |
 | [`posthog-single-node`](posthog-single-node/SKILL.md) | Carries the PostHog-specific knowledge a single-node deployment needs: the ten-container topology, the ClickHouse Keeper, macro and named-collection configuration its migrations require, the capture/plugin-server ingestion chain, converge ordering, and a catalogue of ~30 failures that each report success. Ships the working files and a validator. |
+| [`rybbit-single-node`](rybbit-single-node/SKILL.md) | Covers the distance between a single-node Rybbit analytics stack that runs and one you can trust: the six-container topology, the one provider-coupled OpenTofu file that lets the same converge run anywhere with an SSH port, ClickHouse backups proven by restoring them, and acceptance checks that catch a stack which looks healthy and stores nothing. Ships the working files and a validator. |
 | [`submit-package-skill`](submit-package-skill/SKILL.md) | Validates an existing Package Skill and opens the recipe PR that submits it to the getcolors.ai Package Skills Catalog. |
+| [`clipboard-screenshot`](clipboard-screenshot/SKILL.md) | Pulls the image on the user's clipboard into the agent's context. Reads the local clipboard bridge on `/tmp/clipboard.sock`, saves the bytes under their real image extension, and separates the failure modes — bridge down, clipboard empty, clipboard holding something that is not an image — so the agent asks for the right fix. |
 | [`refresh-oci-token`](refresh-oci-token/SKILL.md) | Renews the OCI CLI session token. Extends it in place while it is still valid; falls back to a browser login when it has expired, adding the login URL to the current Emacs server's kill ring so a headless host can complete the flow. |
 
 ## Use create-package-skill
@@ -49,6 +51,15 @@ agent when troubleshooting.
 The script runs under [babashka](https://babashka.org/) and also needs the `oci`
 CLI on `PATH`.
 
+## Install clipboard-screenshot
+
+`clipboard-screenshot` carries a script too, so install the whole directory the
+same way — the same caveat about install roots and stale copies applies. The
+script is bash and needs `nc`, `file` and `timeout` on `PATH`, plus the clipboard
+bridge listening on `/tmp/clipboard.sock` (override with `CLIPBOARD_SOCKET`).
+Without the bridge the skill reports that it cannot reach the clipboard rather
+than guessing at the image.
+
 ## These are not Package Skills
 
 The Colors stack has a second, unrelated thing called a skill: `package-once-*`
@@ -72,12 +83,13 @@ for it.
     references/           docs the agent reads on demand, not up front
     assets/               working files it copies and adapts
     scripts/              checks and helpers it runs
+    evals/                prompts, expected outputs and assertions for the skill
 ```
 
-Most skills here are just `SKILL.md`. The three optional directories exist for a
+Some skills here are just `SKILL.md`. The three optional directories exist for a
 skill carrying more than an agent should hold in context at once: keep `SKILL.md`
-the map, and point at `references/` for the detail. `posthog-single-node` is the
-one that uses them.
+the map, and point at `references/` for the detail. `posthog-single-node` and
+`rybbit-single-node` use all three; `clipboard-screenshot` uses `scripts/` alone.
 
 The `description` is routing text: it is all an agent sees when deciding whether
 the skill applies, so name the symptoms someone would actually hit — the error
