@@ -106,6 +106,16 @@ following, all of which look like dead weight and are not:
 reuses the credentials the profile already has, which on an expired session are
 the expired ones.
 
+## Documentation
+
+`index.html` is this repository's landing page and carries two analytics tags:
+GA4 measurement ID `G-4VKP1WY4QJ`, whose explicit `page_title` must exactly
+equal the decoded HTML `<title>` and stay distinct and stable so one Analytics
+property can separate repositories, and the self-hosted Rybbit snippet
+`<script src="https://rybbit.getcolors.ai/api/script.js" data-site-id="9fb9c41a6d49" defer></script>`,
+which shares one site ID across every page because `getcolors.github.io/<repo>/`
+paths already encode the repository. Never add one tag without the other.
+
 ## Git
 
 Ordinary single-repo git — no SHA pins, no cross-layer coordination, so nothing
