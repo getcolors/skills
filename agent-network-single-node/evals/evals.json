@@ -1,0 +1,65 @@
+{
+  "skill_name": "agent-network-single-node",
+  "evals": [
+    {
+      "id": 0,
+      "name": "acme-no-viable-challenge",
+      "prompt": "i've got a netbird agent network stack up on one box - traefik in front, reverse proxy in private mode, dashboard, the combined server. base domain has a cert fine but the generated endpoint hostname never gets one. proxy log shows every acme order failing with 'no viable challenge type found'. i tried switching NB_PROXY_ACME_CHALLENGE_TYPE and pointing it at LE staging, same thing. i fetched the failed authz from the CA and it literally offers tls-alpn-01. what am i doing wrong? been retrying for an hour",
+      "expected_output": "Should identify the per-name ACME responder in reverse-proxy 0.77.1 as defective (not a configuration error), warn that each failed order deactivates an authorization and burns Let's Encrypt's failed-authorizations-per-hour limit so retrying locks the hostname out in sliding one-hour windows, and recommend the wildcard DNS-01 certificate workaround: issue a wildcard for the endpoint parent domain with lego, hand it to the proxy as a static certificate (CERTIFICATE_FILE relative to the certificate directory, files readable by uid 1000, ACME off), and rely on the proxy file-watching the pair for renewal.",
+      "files": [],
+      "assertions": [
+        "States that per-name ACME is defective/broken in the pinned reverse-proxy build rather than misconfigured",
+        "Tells the user to stop retrying because failed authorizations count toward Let's Encrypt's rate limit and lock the name out in sliding one-hour windows",
+        "Recommends a wildcard certificate for the endpoint parent domain issued via DNS-01 as the workaround",
+        "Mentions serving it to the proxy as a static certificate with ACME disabled",
+        "Mentions at least one static-cert gotcha: CERTIFICATE_FILE being relative to the certificate directory, or file ownership/readability for the container user",
+        "Does NOT suggest yet another NB_PROXY_ACME_CHALLENGE_TYPE value as the fix"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "endpoint-http-000",
+      "prompt": "single-host netbird agent network deployment, docker compose. from my agent container every curl to the generated endpoint hostname is just HTTP 000, transport level, forever. compose ps says everything is healthy. the reverse proxy container's own logs show its embedded netbird client failing to reach signal at our public hostname. traefik and the proxy are on two shared docker networks. where do i start?",
+      "expected_output": "Should diagnose two stacked causes. First, hairpin NAT: the proxy's embedded client resolves the base domain to the public address and cannot loop back into the same host, so it needs extra_hosts mapping the base domain to Traefik's gateway-network address (until it registers, the endpoint has no backend). Second, once registered: Traefik picks an arbitrary shared network to dial the proxy, so with PROXY protocol trust pinned to one source address the dial network must be pinned with the traefik.docker.network label and explicit compose network names, noting a rename needs compose down. Should warn against 'fixing' it by mapping the endpoint hostname in extra_hosts, which bypasses the identity path.",
+      "files": [],
+      "assertions": [
+        "Identifies hairpin NAT as why the proxy's embedded client cannot reach signal at the public hostname from inside the host",
+        "Recommends extra_hosts mapping the base domain to Traefik's gateway-network address on the proxy",
+        "Identifies that Traefik may dial the proxy over the wrong shared network, breaking PROXY protocol source trust",
+        "Recommends pinning the dial network with the traefik.docker.network label",
+        "Warns that mapping the endpoint hostname itself in extra_hosts would bypass the tunnel/identity path and must not be done",
+        "Does NOT attribute the failure to the endpoint's DNS record or the public firewall"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "endpoint-never-minted",
+      "prompt": "following the netbird agent network docs on a self-hosted 0.77 box. i created the anthropic provider through the api (had to use provider_id anthropic_api by the way, plain 'anthropic' 422s), plus a guardrail and a policy. docs say the endpoint gets generated when you connect your first provider but GET /api/agent-network/settings still shows an empty endpoint. dashboard shows the provider fine. what actually creates the endpoint?",
+      "expected_output": "Should state that the endpoint label is minted by POST /api/agent-network/settings with {proxy_address}, not by connecting a provider - the docs sentence describes the dashboard's flow, which performs that POST implicitly. Should note the POST fails until the reverse proxy cluster has registered (so retry), that 409 means a concurrent bootstrap already won and is success, and that later PUTs are full-replace and must echo the immutable endpoint/proxy_address. Should confirm the anthropic_api catalog-id observation and point at GET /api/agent-network/catalog/providers as the authority.",
+      "files": [],
+      "assertions": [
+        "States that POST /api/agent-network/settings with proxy_address is what mints the endpoint",
+        "Explains that the docs' 'first provider' sentence describes the dashboard flow, not the API contract",
+        "Mentions that the POST requires the proxy cluster to be registered first and should be retried",
+        "States that a 409 response means a concurrent bootstrap won and is success",
+        "Confirms the provider catalog id observation or points at the catalog/providers endpoint",
+        "Does NOT tell the user to create more providers or policies to trigger endpoint generation"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "external-401-not-proof",
+      "prompt": "quick sanity check on our agent network setup. the endpoint is supposed to be tunnel-only. i curled the public endpoint hostname from my laptop (no vpn, definitely outside the overlay) with a bogus model request and got a 401 back from anthropic. so outsiders get denied - that's the behaviour we want, right? want to codify this as a smoke test",
+      "expected_output": "Should say no: an Anthropic 401 relayed to an external caller means the proxy attached the server-side provider key and forwarded an unauthenticated request upstream - with a real key that would have been billable. The correct tunnel-only behaviour is the proxy's bare pre-identity 403 (ValidateTunnelPeer fails before provider logic), which also writes no access-log entry. The smoke test should require exactly HTTP 403 fail-closed, assert zero unattributed access-log entries, and refuse to run from a machine with a NetBird/WireGuard interface.",
+      "files": [],
+      "assertions": [
+        "States that the relayed upstream 401 is a failure of the tunnel-only property, not a proof of it",
+        "Explains that the 401 means server-side key injection forwarded an unauthenticated external request upstream",
+        "States that the correct external outcome is the bare pre-identity 403",
+        "Recommends the test require exactly 403 and fail on every other outcome including 200 and 401",
+        "Mentions asserting no unattributed access-log entries, or that the pre-identity denial writes no log entry",
+        "Recommends refusing to run the probe from a machine carrying a NetBird or WireGuard interface"
+      ]
+    }
+  ]
+}
