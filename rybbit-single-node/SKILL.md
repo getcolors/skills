@@ -1,9 +1,28 @@
 ---
 name: rybbit-single-node
-description: Everything needed to run a self-hosted single-node Rybbit analytics stack you can actually trust - the six-container topology, the provider-independent seam that lets one converge run on DigitalOcean or Vultr or anything else with an SSH port, ClickHouse backups that restore instead of merely existing, and verification that catches a stack which looks healthy and stores nothing. Use this whenever the user mentions self-hosting, deploying, provisioning, sizing, migrating, backing up, restoring, or debugging Rybbit, or is working on a Rybbit docker-compose, Caddy reverse proxy in front of Rybbit, ClickHouse or PostgreSQL backup, or event-ingestion problem - even if they do not say "single-node" and even if they are only changing one setting. Also use it when someone reports that Rybbit returns success but records no events, that a Caddyfile or config edit had no effect, that a container is serving old configuration, that signup cannot be disabled or re-enabled, that analytics show the CDN's address instead of the visitor's, or that they want to move a Rybbit deployment to a different cloud provider.
+description: Everything needed to run a self-hosted single-node Rybbit analytics stack you can actually trust - the six-container topology, the provider-independent seam that lets one converge run on DigitalOcean or Vultr or anything else with an SSH port, ClickHouse backups that restore instead of merely existing, and verification that catches a stack which looks healthy and stores nothing. Use this whenever the user mentions self-hosting, deploying, provisioning, sizing, migrating, backing up, restoring, or debugging Rybbit, or is working on a Rybbit docker-compose, Caddy reverse proxy, ClickHouse or PostgreSQL backup, or event-ingestion problem - even if they do not say "single-node". Also use it on these symptoms - Rybbit returns success but records no events, a Caddyfile or config edit had no effect, analytics show the CDN's address instead of the visitor's, or signup cannot be disabled. The full symptom index is at the top of the body.
 ---
 
 # Single-node Rybbit
+
+## Symptom index
+
+Load the rest of this skill when any of these appear; each has a full entry
+with verbatim symptoms in `references/failure-catalogue.md`:
+
+- Rybbit returns success but records no events
+- a Caddyfile or config edit had no effect, or a container is serving old
+  configuration (the stale-inode single-file-mount trap)
+- signup cannot be disabled or re-enabled (`env_file` is read at container
+  creation, not while it runs)
+- analytics attribute every visit to the CDN's address instead of the
+  visitor's (`trusted_proxies` does not match what is in front of Caddy)
+- a backup unit "succeeds" but no restorable archive exists
+- pages load with intermittent slowness behind a healthy stack (HTTP/3
+  advertised on UDP 443 without the port being reachable)
+- moving a Rybbit deployment to a different cloud provider, or sizing and
+  resize questions (a DigitalOcean downsize is refused; it is a delete and
+  restore)
 
 Rybbit self-hosts easily. Upstream ships a compose file and an install script,
 and they work — which is the honest starting point, and the reason this skill is
@@ -37,7 +56,9 @@ verification    (acceptance) needs an HTTPS hostname and SSH
 The Ansible layer, the compose stack, the Caddyfile, the backup unit and the
 acceptance checks contain **no provider concepts at all**. Moving from
 DigitalOcean to Vultr, Hetzner or bare metal replaces one `main.tf` and changes
-nothing else. `assets/tofu/` ships two implementations of that one file, and
+nothing else. The companion [`getcolors/rybbit`](https://github.com/getcolors/rybbit)
+Package Skill ships two implementations of that one file
+(`tools/infrastructure/digitalocean/`, `tools/infrastructure/vultr/`), and
 `references/providers.md` gives the contract so you can write a third.
 
 Three things do cross the seam, and getting them wrong is quiet rather than
@@ -62,7 +83,8 @@ loud:
 
 ## The six containers
 
-`assets/ansible/compose.yml` is the working file with the reasoning inline.
+The companion's `tools/ansible/compose.yml` is the working file with the
+reasoning inline.
 
 | Service | Image | Why |
 |---|---|---|
@@ -132,7 +154,8 @@ went stale for some reason you never diagnosed, which a change flag cannot do.
 **Do this for every single-file mount, not just the noisy one.** This stack has
 two — the Caddyfile and the ClickHouse `users.d` profile — and the quiet one is
 more dangerous: a stale JSON-type setting surfaces as a schema that will not
-build rather than as a missing header. `assets/ansible/main.yml` loops over both.
+build rather than as a missing header. The companion's `tools/ansible/main.yml`
+loops over both.
 A *directory* mount is immune, so mounting the parent is the alternative fix, at
 the cost of shadowing whatever the image ships there.
 
@@ -164,7 +187,8 @@ and the decision rules are exactly where the mistakes hide.
 
 ## Converge order
 
-`assets/ansible/main.yml` is the whole playbook. Rybbit's own migrations run at
+The companion's `tools/ansible/main.yml` is the whole playbook. Rybbit's own
+migrations run at
 backend startup and need no orchestration, so the ordering is far less delicate
 than PostHog's. What matters:
 
@@ -199,16 +223,13 @@ than against the file on disk.
 
 ## SSH: disposable agent, disposable key
 
-Never put your long-lived personal key on a machine you plan to delete.
-`scripts/ephemeral-ssh.sh` creates a per-deployment key and its own agent, and
-both tofu configs accept `ssh_public_key` so the key is registered as a resource
-and removed by `tofu destroy` rather than left orphaned in the account.
-
-```sh
-eval "$(scripts/ephemeral-ssh.sh start)"
-tofu apply -var "ssh_public_key=$(scripts/ephemeral-ssh.sh pubkey)"
-eval "$(scripts/ephemeral-ssh.sh stop)"
-```
+Never put your long-lived personal key on a machine you plan to delete. Use a
+per-deployment key created, used, and destroyed with the stack: generate it
+into its own agent, and register the public key as a tofu **resource**
+(`digitalocean_ssh_key` / `vultr_ssh_key`) so `tofu destroy` removes it from
+the account instead of leaving an orphan. Inside the Colors ecosystem the
+companion package manages the profile-named machine keypair per the workspace
+SSH Keypair Standard; outside it, recreate the pattern yourself.
 
 One agent rather than naming the key file everywhere, because OpenTofu's
 `remote-exec` uses a Go SSH client that ignores `~/.ssh/config` and reads
@@ -218,9 +239,8 @@ is the only channel both accept.
 If `~/.ssh/config` disables agents — `IdentityAgent none` with `IdentitiesOnly
 yes` is a common hardening — then `ANSIBLE_SSH_ARGS` must override **both**
 (`-o IdentityAgent=<sock> -o IdentitiesOnly=no`); setting one alone silently
-fails to authenticate. The script emits the correct value. See
-`references/providers.md` for the details and the `ssh -G` check that proves the
-override took.
+fails to authenticate. See `references/providers.md` for the details and the
+`ssh -G` check that proves the override took.
 
 ## Credentials
 
@@ -239,9 +259,10 @@ Read `references/acceptance.md` before writing any check. The short version:
 backup unit are all compatible with a deployment that stores nothing and has no
 recoverable data.
 
-`scripts/acceptance.sh` implements the checks that survived: TLS without `-k`, a
-synthetic event read back out of ClickHouse into a throwaway site, and a backup
-confirmed by a fresh object in the bucket.
+The checks that survived — TLS without `-k`, a synthetic event read back out
+of ClickHouse into a throwaway site, and a backup confirmed by a fresh object
+in the bucket — are specified in `references/acceptance.md` and implemented as
+the companion package's acceptance step.
 
 ## Backups that are actually backups
 
@@ -260,20 +281,19 @@ Four requirements, each of which was learned by having it wrong:
 - **Apply retention to the bucket, not only the disk.** Pruning locally while
   object storage keeps everything forever is not a retention policy.
 
-## Check configuration before it reaches a host
+## Check rendered configuration before it reaches a host
 
-```sh
-python3 scripts/validate_assets.py <your-config-dir>
-```
+Four properties are silent on the server when wrong, so verify them on your
+**rendered** files rather than waiting for the symptom (each has an entry in
+`references/failure-catalogue.md`):
 
-Run it on your **rendered** files, not only the bundled templates. Every check
-corresponds to a failure that is silent on the server: a floating image tag that
-moves under the deployment, a compose file missing a service the stack cannot
-run without, a Caddyfile with no access logging or no `trusted_proxies` behind a
-CDN, a ClickHouse profile that never enables the JSON types the schema needs.
-
-It reports every problem rather than the first and exits non-zero if any are
-found. `PROBLEM` lines are failures; notes are advisory.
+- every image tag is pinned — a floating tag moves under the deployment;
+- the compose file names all six services — the stack cannot run without any
+  of them;
+- the Caddyfile has access logging on, and `trusted_proxies` matches whatever
+  is actually in front of the origin;
+- the ClickHouse `users.d` profile enables the JSON types Rybbit's schema
+  needs.
 
 ## Reference material
 
@@ -289,34 +309,27 @@ Read as needed rather than up front:
 - **`references/pins.md`** — the verified-good image set with its date, and the
   rules for choosing a new one.
 
-## Assets
+## The reference implementation, and why this skill ships no assets
 
-Working files, copy and adapt:
+The working files live in the
+[`getcolors/rybbit`](https://github.com/getcolors/rybbit) Package Skill under
+`src/resources/io/github/getcolors/rybbit/tools/` — the converge playbook
+`ansible/main.yml`, `ansible/compose.yml` with the six services,
+the Caddyfile, the backup script, `cleanup.yml`, and the
+`infrastructure/digitalocean/`, `infrastructure/vultr/`, and `dns/` OpenTofu —
+covered by that repo's tests and golden fixtures and consumed by the
+`rybbit-vultr` deployment, which has served production analytics for every
+getcolors page since 2026-08-24. This skill deliberately does **not** carry
+copies of them: a second, untested copy drifts, and this skill's own former
+assets did exactly that — they were the diverged copy, and their one verified
+improvement (the UDP 443 HTTP/3 publication) had to be upstreamed into the
+package before they could be deleted. Read the files there; read *why they are
+shaped that way* here. Outside the Colors ecosystem the topology and the traps
+transfer wholesale — only the OpenTofu/Ansible packaging is local.
 
-```
-assets/
-├── ansible/
-│   ├── main.yml           the converge playbook
-│   ├── cleanup.yml        stop the stack before tearing infrastructure down
-│   ├── compose.yml        six services, reasoning inline
-│   ├── Caddyfile          TLS, /api split, access logging, trusted_proxies
-│   ├── backup             pg_dump + ClickHouse BACKUP + restore drill + upload
-│   ├── group_vars/all.yml every knob, with defaults that work
-│   ├── ansible.cfg
-│   └── inventory.example.ini
-└── tofu/
-    ├── digitalocean/      droplet + firewall          VERIFIED live
-    ├── vultr/             instance + firewall group   schema-checked, not converged
-    └── cloudflare-dns/    proxied A record            VERIFIED live
-```
-
-The Ansible assets are ordinary Ansible: `group_vars/all.yml` holds the
-variables and the templates use `{{ }}`. Quote any YAML value that starts with
-`{{` — unquoted, it parses as a flow mapping and the file becomes invalid, which
-Docker only discovers on the host.
-
-**`assets/tofu/vultr/` has never been converged.** `tofu validate` passes
-against the real provider schema, so the resource and attribute names are right;
-nothing the API decides at apply time has been tested. It is a strong starting
-point that still owes you one `tofu plan`, and the file says so in a banner you
-should delete once it has run.
+**On the templating delimiters.** In those files `<{ key }>` is substituted at
+build time by the green package's scaffold and `{{ ... }}` survives into
+Ansible. If you are reusing them outside that context, `<{ ... }>` are your
+substitution points. Quote any YAML value that starts with `{{` — unquoted, it
+parses as a flow mapping and the file becomes invalid, which Docker only
+discovers on the host.

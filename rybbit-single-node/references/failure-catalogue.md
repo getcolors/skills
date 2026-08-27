@@ -50,7 +50,7 @@ two — the Caddyfile and the ClickHouse `users.d` profile — and the ClickHous
 one is the more dangerous because a stale JSON-type setting surfaces as a schema
 that will not build rather than as a missing header. The same trap bit twice in
 the PostHog sibling, in two different services. Enumerate your file mounts and
-reconcile all of them; `assets/ansible/main.yml` loops over the list.
+reconcile all of them; the companion's `tools/ansible/main.yml` loops over the list.
 
 A directory mount does not have this problem — the container follows the
 directory, so files created or replaced inside it are visible. Mounting the

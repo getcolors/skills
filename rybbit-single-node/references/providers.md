@@ -41,18 +41,12 @@ single-run decision, not an edit that stays in the file.
 
 Do not put your long-lived personal key on a machine you intend to delete. Use
 a per-deployment key that is created, used, and destroyed with the stack:
-
-```sh
-eval "$(scripts/ephemeral-ssh.sh start)"          # key + agent, exports the env
-tofu apply -var "ssh_public_key=$(scripts/ephemeral-ssh.sh pubkey)"
-# ... converge, run acceptance ...
-eval "$(scripts/ephemeral-ssh.sh stop)"           # kills the agent, deletes the key
-```
-
-Both tofu configs take `ssh_public_key` and register it as a resource
-(`vultr_ssh_key` / `digitalocean_ssh_key`), so `tofu destroy` removes it from
-the account. Uploading a key by hand instead leaves an orphan whose id survives
-only in someone's notes.
+generate a fresh keypair, load it into its own dedicated agent, and register
+the public key as a tofu resource (`vultr_ssh_key` / `digitalocean_ssh_key`)
+so `tofu destroy` removes it from the account. Uploading a key by hand instead
+leaves an orphan whose id survives only in someone's notes. Inside the Colors
+ecosystem the companion package owns the profile-named machine keypair per the
+workspace SSH Keypair Standard.
 
 **One agent, because the two tools disagree about where identity comes from.**
 OpenTofu's `remote-exec` provisioner uses a Go SSH client that ignores
@@ -77,10 +71,10 @@ stops OpenSSH consulting any agent — `IdentityAgent none` disables it, and
 -o IdentityAgent=<sock> -o IdentitiesOnly=no
 ```
 
-Setting only one fails to authenticate. `ephemeral-ssh.sh start` emits the full
-value, and because `ANSIBLE_SSH_ARGS` *replaces* Ansible's default rather than
-extending it, that value repeats the `ControlMaster`/`ControlPersist` options —
-drop them and every task pays for a fresh handshake.
+Setting only one fails to authenticate. And because `ANSIBLE_SSH_ARGS`
+*replaces* Ansible's default rather than extending it, the value must repeat
+the `ControlMaster`/`ControlPersist` options — drop them and every task pays
+for a fresh handshake.
 
 Verify the override actually took, rather than assuming:
 
@@ -90,15 +84,16 @@ ssh -G $ANSIBLE_SSH_ARGS <host> | grep -E 'identityagent|identitiesonly'
 
 **Two failure modes worth knowing.** A Unix socket path is capped near 108
 bytes and `ssh-agent -a` fails above it, so a deeply nested deployment
-directory needs the socket elsewhere — the script falls back to
-`$XDG_RUNTIME_DIR` automatically. And a stale socket from a dead agent makes
+directory needs the socket elsewhere — `$XDG_RUNTIME_DIR` is the reliable
+fallback. And a stale socket from a dead agent makes
 every later connection *block* rather than fail, which is worse than having no
-agent; the script removes one before starting.
+agent; remove any stale socket before starting a fresh one.
 
 ## DigitalOcean — verified
 
-`assets/tofu/digitalocean/main.tf`. This is the implementation the whole skill
-was verified against.
+The companion's `tools/infrastructure/digitalocean/main.tf` in
+`getcolors/rybbit`. This is the implementation the whole skill was verified
+against.
 
 | Concern | How |
 |---|---|
@@ -118,26 +113,24 @@ false` does **not** work around it — that was verified against the live API, n
 reasoned about. Moving down a plan is a delete, a recreate and a restore. Size
 conservatively at the start.
 
-## Vultr — schema-checked, not yet converged
+## Vultr — verified live
 
-`assets/tofu/vultr/main.tf`. Written from the Vultr provider's own documentation
-(`vultr/terraform-provider-vultr`, `website/docs/r/`).
-
-**What is checked.** `tofu validate` passes against the real provider schema
-(v2.32.0), so every resource type, attribute name and type below is correct
-rather than remembered — the class of error that would otherwise surface as a
-confusing plan failure is already excluded.
-
-**What is not.** No machine has been created from it. Anything the API decides
-at apply time is unverified: plan and region availability, whether the OS filter
-matches exactly one image, and every behaviour claim in this section. Run
-`tofu plan` against your own account first, and delete the banner in the file
-once you have converged and run `scripts/acceptance.sh`.
+The companion's `tools/infrastructure/vultr/main.tf` in `getcolors/rybbit`.
+Originally written from the Vultr provider's own documentation and
+schema-checked only; since 2026-08-24 it has been converged for real — the
+`rybbit-vultr` deployment built from it serves production analytics for every
+getcolors page. Two mechanics differ from the DigitalOcean file and both
+destroy data if guessed wrong: `hostname` and `ssh_key_ids` are ForceNew on
+Vultr (a hostname change is an OS reinstall, a key-set change recreates the
+instance), so the playbook owns the hostname and keys last the life of the
+deployment. The companion also generates its firewall rules into
+`firewall.tf.json` (one resource per protocol, family, and port — including
+the UDP 443 HTTP/3 hole) rather than looping in HCL.
 
 | Concern | How |
 |---|---|
 | Machine | `vultr_instance` — required `region` and `plan`; `os_id` for the image |
-| OS | `data "vultr_os"` with a `filter` on `name`, so you match `Ubuntu 24.04 LTS x64` by name instead of hardcoding a numeric id |
+| OS | the companion pins `os_id` from desired state; matching by name via `data "vultr_os"` with a `filter` is the portable alternative to hardcoding a numeric id |
 | Firewall | `vultr_firewall_group` plus **one `vultr_firewall_rule` per (protocol, ip_type, port)** |
 | Address | `vultr_instance.<name>.main_ip` — *not* `ipv4_address` |
 | Console name | `label` |
@@ -185,7 +178,7 @@ not after.
 
 ## DNS is a separate choice
 
-`assets/tofu/cloudflare-dns/` is independent of the compute provider — it takes
+The companion's `tools/dns/` is independent of the compute provider — it takes
 an address and publishes a record, and works unchanged behind either
 implementation above. Using a provider's own DNS instead is fine, with one
 consequence:
@@ -213,6 +206,6 @@ needs the origin address.
 4. Check whether the machine has a hostname attribute and whether changing it is
    destructive. If in doubt, do not set it: the playbook does.
 5. Check the resize and rename policies before you choose a size.
-6. Converge, then run `scripts/acceptance.sh`. Nothing above the seam should
+6. Converge, then run the acceptance checks in `acceptance.md`. Nothing above the seam should
    need to change; if something does, that is the interesting finding and it
    belongs in this file.

@@ -117,4 +117,4 @@ reported success — so it announced success unconditionally, including when the
 endpoint had rejected the request. The fix is not "be careful"; it is to make the
 success branch structurally depend on the verdict.
 
-`../scripts/acceptance.sh` implements all of the above.
+The companion package's acceptance step implements all of the above; outside the Colors ecosystem, script them yourself from this page.

@@ -80,7 +80,7 @@ explicit tags for reproducibility and move them on their own schedule.
 1. Re-resolve **both** application digests, in one change.
 2. Check the ClickHouse settings still exist under those names if you are moving
    ClickHouse.
-3. Converge, then run `scripts/acceptance.sh` end to end. Read
+3. Converge, then run the acceptance checks in `acceptance.md` end to end. Read
    `acceptance.md` first: several obvious checks pass against a broken
    deployment, and a moved pin is exactly when you need the ones that do not.
 4. Trigger a backup and confirm a fresh object in the bucket. A schema change
