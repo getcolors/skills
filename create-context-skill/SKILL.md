@@ -65,10 +65,25 @@ Keep `SKILL.md` under 500 lines; agents load references on demand.
 Apply the no-second-copy rule as you go: the skill carries **no copies of
 anything a tested implementation owns**. Name the companion repository in
 the body and point at its files; do not reproduce them. In migration mode
-this is the main work — verify the companion package owns every file in
-`assets/`, then delete `assets/` and `scripts/` that validate them, and
-rewrite references to point at the companion. A file the companion does not
-own yet moves there first, behind that package's own tests.
+this is the main work, and ownership is not binary — compare each `assets/`
+file with the companion's sibling before deciding:
+
+- **Identical** (allowing comment and templating-delimiter noise): delete
+  the copy and point at the companion path.
+- **Diverged**: normalize the pair — strip comments, unify templating
+  delimiters — and diff, then classify every delta. The companion being
+  ahead is fine: drop the copy. A skill-side improvement that was
+  *verified* moves upstream first, through the companion's own tests,
+  golden fixtures, and pin flow, before the copy is deleted — deleting it
+  first destroys the only record of the fix. Reasoning that lived only in
+  the copy's comments survives as prose in the body or references.
+- **Not owned by the companion at all**: the file moves there first, behind
+  that package's own tests.
+
+`scripts/` go with the assets, operational ones included: a deleted
+script's checks survive as a prose checklist in the references, tied to
+the failure-catalogue entries they guard, so the knowledge keeps working
+after the file is gone.
 
 ## Phase 3 — Route
 
@@ -79,6 +94,11 @@ the full symptom index at the top of the body. Draft the symptom-oriented
 keywords now, while the failures are fresh — the catalog recipe will need
 them, including any error strings the cap forced out of the description.
 
+In migration mode, measure the inherited description against the cap before
+restructuring: trimming an over-cap description and moving the full index
+into the body reshapes the skill, so find that out early, not at
+validation.
+
 ## Phase 4 — Prove
 
 - Write `evals/` prompts shaped as a user in trouble: the support message
@@ -88,6 +108,12 @@ them, including any error strings the cap forced out of the description.
   the description cap and the name/directory match.
 - Re-read the body against Phase 1: every claim either names what verified
   it or says it is unverified. Remove anything that does neither.
+- In migration mode there is no Phase 1 harvest to re-read against; instead
+  re-verify every dated or status claim against what the companion and its
+  deployments have done since the skill was written. A "schema-checked, not
+  yet converged" note may have been superseded by a production deployment —
+  a migrated skill that repeats it is lying in the safe direction, which is
+  still lying.
 
 ## Phase 5 — Hand off
 
