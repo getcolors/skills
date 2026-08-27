@@ -15,8 +15,9 @@ carry knowledge distilled from a verified build — symptom-routed traps,
 contracts, and acceptance doctrine. The normative definition, the five
 required artifacts, and the no-second-copy rule live in
 `workspace/standards/context-skill.md`; `agent-network-single-node` is the
-reference implementation, and the posthog and rybbit skills still carry
-`assets/` that must migrate before catalog submission. Neither kind is a
+reference implementation, and `posthog-single-node` migrated to it on
+2026-08-27 — only `rybbit-single-node` still carries `assets/` that must
+migrate before catalog submission. Neither kind is a
 Package Skill, and none depend on green/red/blue at runtime.
 
 Read `../CLAUDE.md` first. This checkout sits inside the `~/code/getcolors`
