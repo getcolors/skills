@@ -4,10 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-`getcolors/skills` holds **Agent Skills** for the workspace. Some fix a
-workstation problem; `create-package-skill` supplies the guarded workflow for
-creating a Colors Package Skill and its deployment. They are not Package Skills
-and never depend on green/red/blue at runtime.
+`getcolors/skills` holds **Agent Skills** for the workspace, of two kinds.
+**Generic skills** carry a procedure: some fix a workstation problem;
+`create-package-skill` supplies the guarded workflow for creating a Colors
+Package Skill and its deployment; `create-context-skill` distills a verified
+build into a Context Skill; `submit-package-skill` and
+`submit-context-skill` govern catalog admission. **Context Skills**
+(`agent-network-single-node`, `posthog-single-node`, `rybbit-single-node`)
+carry knowledge distilled from a verified build — symptom-routed traps,
+contracts, and acceptance doctrine. The normative definition, the five
+required artifacts, and the no-second-copy rule live in
+`workspace/standards/context-skill.md`; `agent-network-single-node` is the
+reference implementation, and the posthog and rybbit skills still carry
+`assets/` that must migrate before catalog submission. Neither kind is a
+Package Skill, and none depend on green/red/blue at runtime.
 
 Read `../CLAUDE.md` first. This checkout sits inside the `~/code/getcolors`
 workspace, and what that file says about the stack, `COLORS_PAR_*`, profiles and
@@ -31,13 +41,22 @@ different mechanism and nothing here applies to them:
 ```
 <skill-name>/
     SKILL.md              YAML frontmatter (`name`, `description`), then prose
-    <skill-name>.clj      the script, when there is one
+    <skill-name>.clj      the script, when there is one (generic skills)
+    references/           on-demand documentation (Context Skills: pins,
+                          failure catalogue, API contract, acceptance)
+    evals/                user-in-trouble prompts — the regression net
+    assets/               working files; disqualifying for a Context Skill
+                          whose companion Package Skill exists
 ```
 
 `description` is **routing text, not documentation**. It is the only thing an
 agent reads when deciding whether to invoke the skill, so it names symptoms —
 `401`, `session expired`, the commands that fail — rather than describing the
-mechanism. The prose body is what gets read afterwards.
+mechanism. The prose body is what gets read afterwards. The Agent Skills spec
+caps it at 1024 characters and `npx skills-ref validate <dir>` enforces that;
+when a symptom index outgrows the cap, the highest-signal symptoms stay in the
+description and the full index moves to the top of the body
+(`agent-network-single-node` shows the pattern).
 
 ## Using create-package-skill
 

@@ -1,9 +1,28 @@
 ---
 name: agent-network-single-node
-description: Everything a single-node NetBird Agent Network deployment needs that the docs and the quickstart installer will not tell you - the four-container gateway stack plus one network-isolated agent, the endpoint that is minted by POSTing the settings resource and not by connecting a provider, the reverse proxy whose per-name ACME is defective on 0.77.1 ("no viable challenge type found") and burns Let's Encrypt rate limits while failing, and the acceptance gates that prove an isolation claim instead of assuming it. Use this whenever the user mentions NetBird Agent Network, a keyless or identity-gated LLM endpoint, the netbird reverse proxy, running an AI agent that must not reach the internet, or is building or debugging that stack - even if they do not say "single-node". Also use it when someone reports that the generated endpoint hostname returns HTTP 000 or has no certificate, that creating a provider returns 422 "is not a known catalog provider", that no endpoint hostname was ever generated, that the proxy container cannot reach signal or management from inside its own host, that PROXY protocol traffic arrives from an untrusted source, that a request was denied with llm_policy.model_blocked or llm_policy.model_not_routable, that an isolated container escaped after a Docker restart or reboot, or that an external request to a "tunnel-only" endpoint got an Anthropic 401 instead of being refused.
+description: Everything a single-node NetBird Agent Network deployment needs that the docs and the quickstart installer will not tell you - the four-container gateway stack plus one network-isolated agent, the endpoint that is minted by POSTing the settings resource and not by connecting a provider, the reverse proxy whose per-name ACME is defective on 0.77.1 ("no viable challenge type found") and burns Let's Encrypt rate limits while failing, and the acceptance gates that prove an isolation claim instead of assuming it. Use this whenever the user mentions NetBird Agent Network, a keyless or identity-gated LLM endpoint, the netbird reverse proxy, or an AI agent that must not reach the internet - even if they do not say "single-node". Also use it on these symptoms - an endpoint hostname with HTTP 000 or no certificate, 422 "is not a known catalog provider", llm_policy.model_blocked or model_not_routable, or an isolated container escaping after a Docker restart. The full symptom index is at the top of the body.
 ---
 
 # Single-node NetBird Agent Network
+
+## Symptom index
+
+Load the rest of this skill when any of these appear; each has a full entry
+with verbatim symptoms in `references/failure-catalogue.md`:
+
+- the generated endpoint hostname returns HTTP 000 or has no certificate
+- per-name ACME orders die with `no viable challenge type found` and burn
+  Let's Encrypt failed-authorization rate limits while failing
+- creating a provider returns 422 `is not a known catalog provider`
+- no endpoint hostname was ever generated
+- the proxy container cannot reach signal or management from inside its own
+  host
+- PROXY protocol traffic arrives from an untrusted source
+- a request was denied with `llm_policy.model_blocked` or
+  `llm_policy.model_not_routable`
+- an isolated container escaped after a Docker restart or reboot
+- an external request to a "tunnel-only" endpoint got an Anthropic 401
+  instead of being refused
 
 NetBird's Agent Network gives autonomous agents keyless, identity-gated access
 to LLM providers: the agent joins a WireGuard overlay, calls a generated
