@@ -82,10 +82,11 @@ You must:
 4. Run all repository-specific tests, golden tests, launcher tests, build checks, and safe dry runs.
 5. Inspect golden diffs rather than accepting them blindly.
 6. Diagnose failures, revise the implementation, and repeat checks until they pass.
-7. Deploy for real only within the authorization established during Phase 1.
-8. Never bypass safety guards or expose credentials.
-9. Do not perform destructive deletion unless it was separately and explicitly authorized.
-10. Commit, push, create repositories, update pins, or incur cloud costs only if those actions were explicitly authorized during Phase 1.
+7. As each converge or gate failure is fixed, record its verbatim error text, what it turned out to mean, and the fix in an untracked session-notes file. Long sessions lose early errors to context summarization, and the optional distillation step needs this material intact — paraphrased symptoms do not route.
+8. Deploy for real only within the authorization established during Phase 1.
+9. Never bypass safety guards or expose credentials.
+10. Do not perform destructive deletion unless it was separately and explicitly authorized.
+11. Commit, push, create repositories, update pins, or incur cloud costs only if those actions were explicitly authorized during Phase 1.
 
 Once Phase 3 begins, do not ask me routine questions or seek approval between steps. Make reasonable engineering decisions from repository conventions and evidence. If an unavoidable blocker exists—such as missing credentials, unavailable permissions, an external outage, or authorization that was never granted—do not guess or weaken safeguards. Stop safely and provide a concise blocker report stating:
 
@@ -127,7 +128,9 @@ A completed, verified build is the qualifying input for a Context Skill —
 the traps, converge failures, review findings, and acceptance doctrine the
 build paid for, distilled per `workspace/standards/context-skill.md`. The
 raw material decays when the session ends, so after the definition of done
-is satisfied, offer this step while the evidence is still in context:
+is satisfied, offer this step while the evidence is still in context. The
+Phase 3 session-notes file is the harvest input; keep it until distillation
+is done or declined:
 
 ```sh
 npx skills use getcolors/skills@create-context-skill
