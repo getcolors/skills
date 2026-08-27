@@ -32,7 +32,7 @@ migration history table itself. ClickHouse stays empty and the site serves 502s.
 with no way to opt out, so every table PostHog creates is a
 `ReplicatedMergeTree`, and those need coordination metadata.
 
-**Fix.** Embedded ClickHouse Keeper — see `assets/clickhouse-config.d/keeper.xml`.
+**Fix.** Embedded ClickHouse Keeper — see the `keeper.xml` block the companion's `tools/ansible/main.yml` installs.
 Upstream runs a separate ZooKeeper; a single node does not need one, Keeper runs
 inside the same server on 9181 with a one-member raft config. A hand-written
 `clusters.xml` supplies `remote_servers` for `ON CLUSTER` DDL, which is a
@@ -83,7 +83,7 @@ required for the schema to exist at all**, not merely for events to flow; and
 every collection a migration names must resolve.
 
 **Fix.** Declare all **eight** up front — see
-`assets/clickhouse-config.d/named-collections.xml`. Only six are discoverable
+the `named-collections.xml` block the companion's `tools/ansible/main.yml` installs. Only six are discoverable
 from `posthog/settings/data_stores.py`; the rest are named directly by
 migrations. Upstream's `docker/clickhouse/config.d/default.xml` is the
 authoritative set. Adding them one failed converge at a time costs a full
@@ -436,7 +436,7 @@ wall.
 organization. Anything that creates one first — including an acceptance check
 asking for a project — closes signup permanently.
 
-**Fix.** The deployment owns the account. `assets/ansible/owner.py` handles all
+**Fix.** The deployment owns the account. the companion's `tools/ansible/owner.py` handles all
 three states a converge can find (empty instance, existing organization,
 existing account), so it is idempotent and rotates the password every run.
 

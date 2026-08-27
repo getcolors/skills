@@ -17,7 +17,7 @@ flowing end to end. **Verified 2026-08-17.**
 | `redis` | `redis:7.2-alpine` |
 | `caddy` | `caddy:2.11.4` |
 
-The bundled `assets/ansible/checkpoint.sql` belongs to `82ea6681…` — 309 tables,
+The companion's `tools/ansible/checkpoint.sql` (in `getcolors/posthog`) belongs to `82ea6681…` — 309 tables,
 1337 applied migrations — and is refused by the commit guard against any other
 image.
 

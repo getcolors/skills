@@ -13,8 +13,11 @@ follows is a **ten-container reduction that has been verified end to end** on a
 five seconds with the right team, and `execute_hogql_query` — the same path the
 UI queries — returns it.
 
-Every fact here was paid for by a failed converge. Use the assets as a starting
-point rather than deriving them again.
+Every fact here was paid for by a failed converge. The working files live in
+the [`getcolors/posthog`](https://github.com/getcolors/posthog) Package Skill
+under `src/resources/io/github/getcolors/posthog/tools/` — start from those
+rather than deriving them again; this skill carries the *why* (see "The
+reference implementation" below).
 
 ## The thing to internalize first
 
@@ -47,8 +50,8 @@ Ansible's `changed` flags.
 
 ## The ten containers, and why none is optional
 
-Read `assets/ansible/compose.yml` — it is the working file, with the reasoning
-kept inline on each service. The short version:
+Read the companion's `tools/ansible/compose.yml` — it is the working file,
+with the reasoning kept inline on each service. The short version:
 
 | Service | Image | Why it cannot be dropped |
 |---|---|---|
@@ -78,8 +81,9 @@ workers are all genuinely optional and are left out deliberately.
 
 ## ClickHouse is where most of the pain lives
 
-Three config files must be mounted into `/etc/clickhouse-server/config.d/`, all
-in `assets/clickhouse-config.d/`, each with its full reasoning inline:
+Three config files must be mounted into `/etc/clickhouse-server/config.d/`.
+The companion's converge playbook (`tools/ansible/main.yml`) writes each one
+inline, with its reasoning in the task that installs it:
 
 - **`keeper.xml`** — embedded Keeper plus the `hostClusterType`/`hostClusterRole`
   macros. `migrate_clickhouse` passes `replicated=True` unconditionally, so every
@@ -104,8 +108,8 @@ Beyond those files:
 
 ## Converge order that works
 
-`assets/ansible/main.yml` is the whole playbook. The ordering is load-bearing;
-these are the constraints behind it:
+The companion's `tools/ansible/main.yml` is the whole playbook. The ordering
+is load-bearing; these are the constraints behind it:
 
 1. **Start the datastores alone** (`db redis kafka clickhouse`). The application
    image migrates on startup, so bringing `web` up before the explicit migration
@@ -144,7 +148,8 @@ rather than falling back to a published value:
 | `POSTHOG_ENCRYPTION_SALT_KEYS` | Shared by application and plugin server; missing means silent no ingestion |
 | `POSTHOG_ADMIN_PASSWORD` | Owner account — see below |
 
-**Provision the owner account yourself** (`assets/ansible/owner.py`). PostHog's
+**Provision the owner account yourself** (the companion's
+`tools/ansible/owner.py`). PostHog's
 hosted realm only lets the *first* user create an organization, so once anything
 creates one — including an acceptance check asking for a project — the signup
 page shows an invite wall and nobody can get in at all. The script is idempotent
@@ -162,48 +167,43 @@ Read these as needed rather than up front:
 - **`references/acceptance.md`** — what to verify after a converge, and why the
   obvious checks pass against a broken deployment.
 
-## Check your configuration before it reaches a host
+## Check your rendered configuration before it reaches a host
 
-```sh
-python3 scripts/validate_assets.py <your-config-dir>
-```
+Four properties are silent on the server when wrong, so verify them on your
+**rendered** files rather than waiting for the symptom (each has a full entry
+in `references/failure-catalogue.md`):
 
-Run this on your **rendered** files, not just the bundled templates. Every check
-corresponds to a failure that is silent on the server: an unparseable XML config
-makes ClickHouse start *without* the settings it describes, a missing named
-collection surfaces hundreds of tables into a migration, a loopback replica host
-only appears when another container dials it, and mismatched application and
-plugin-server commits only appear when the consumer hits its first message.
+- every ClickHouse config XML actually parses — an unparseable file makes
+  ClickHouse start *without* the settings it describes;
+- all **eight** Kafka named collections are present — a missing one surfaces
+  hundreds of tables into a migration;
+- no `remote_servers` replica host is a loopback address — `127.0.0.1` only
+  bites when another container dials it;
+- the application and plugin-server images pin the **same** commit — a
+  mismatch only appears when the consumer hits its first message.
 
-It reports every problem rather than the first, and exits non-zero if any are
-found. Notes are advisory; `PROBLEM` lines are not.
+## The reference implementation, and why this skill ships no assets
 
-## Assets
+The working files live in the
+[`getcolors/posthog`](https://github.com/getcolors/posthog) Package Skill
+under `src/resources/io/github/getcolors/posthog/tools/` — the converge
+playbook `ansible/main.yml` (which also writes the three
+`clickhouse-config.d` files inline), `ansible/compose.yml` with the
+ten services, the Caddyfile, the backup script, `ansible/owner.py`, the
+stamped `ansible/checkpoint.sql`, and the `dns/` and `infrastructure/`
+OpenTofu — covered by that repo's tests and golden fixtures and consumed by
+the `posthog-digitalocean` deployment. This skill deliberately does **not**
+carry copies of them: a second, untested copy drifts, and this workspace has
+a documented history of exactly that failure. Read the files there; read *why
+they are shaped that way* here. Outside the Colors ecosystem the topology and
+the traps transfer wholesale — only the OpenTofu/Ansible packaging is local.
 
-Working files, copy and adapt:
-
-```
-assets/
-├── ansible/
-│   ├── main.yml           the converge playbook (ordering is load-bearing)
-│   ├── cleanup.yml        teardown
-│   ├── compose.yml        ten services, reasoning inline
-│   ├── Caddyfile          TLS, capture/application routing, Cloudflare trusted_proxies
-│   ├── ansible.cfg
-│   ├── backup             pg_dump + ClickHouse BACKUP + rclone to S3-compatible storage
-│   ├── owner.py           idempotent owner provisioning
-│   └── checkpoint.sql     854KB schema checkpoint, stamped `-- posthog-commit:`
-├── clickhouse-config.d/   keeper.xml, clusters.xml, named-collections.xml
-└── tofu/                  DigitalOcean droplet + firewall, Cloudflare DNS record
-```
-
-**On the templating delimiters.** The assets came from a `getcolors` green
-package, where `<{ key }>` is substituted at build time by the scaffold and
-`{{ ... }}` survives into Ansible. If you are reusing these outside that
-context, `<{ ... }>` are your substitution points. Keep the distinction
-deliberate: an unquoted `{{ ... }}` at the start of a YAML value reads as a flow
-mapping and makes the file unparseable — a failure Docker only discovers on the
-host.
+**On the templating delimiters.** In those files `<{ key }>` is substituted
+at build time by the green package's scaffold and `{{ ... }}` survives into
+Ansible. If you are reusing them outside that context, `<{ ... }>` are your
+substitution points. Keep the distinction deliberate: an unquoted `{{ ... }}`
+at the start of a YAML value reads as a flow mapping and makes the file
+unparseable — a failure Docker only discovers on the host.
 
 **On `checkpoint.sql`.** It is stamped with the commit it was taken from
 (`82ea6681…`, 309 tables, 1337 applied migrations). It is plain SQL carrying the
