@@ -84,12 +84,15 @@ pnpm build
 
 Both commands fetch the referenced public `SKILL.md` and validate recipe metadata. Inspect the generated catalog, source, and Package Skill routes when practical.
 
-If authorized, create one focused commit, push it, and open a PR against `getcolors/colors-website:main`. The PR body must include:
+A new recipe adds catalog routes whose social cards must exist in `public/` — `pnpm build` fails on the `requireLocalImage` gate until they do. Run `scripts/generate-og-image.py` (the setup block at its top documents the one-off Python environment), then check `git status`: exactly the new recipe's card(s) should appear, and they belong in the submission commit. The generator is deterministic, so unrelated cards do not change.
+
+If authorized, create one focused commit — the recipe plus its generated og card(s) — push it, and open a PR against `getcolors/colors-website:main`. The PR body must include:
 
 - the Package Skill definition checklist;
 - source repository and Package Skill paths;
 - runtimes;
 - the existing `npx skills` installation commands;
+- the generated og card(s) for the new routes;
 - verification commands and results;
 - any missing skills.sh installation count, which is allowed and must not block submission.
 

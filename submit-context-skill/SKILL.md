@@ -47,8 +47,10 @@ For every proposed entry:
 
 1. Read its complete `SKILL.md`, every file under `references/`, and
    `evals/`.
-2. Run `skills-ref validate` on the skill directory; it must pass, including
-   the 1024-character description cap and the name/directory match.
+2. Run `skills-ref validate` on the skill directory — clone the source
+   repository first; validation reads a local directory, not a URL. It must
+   pass, including the 1024-character description cap and the
+   name/directory match.
 3. Verify the `description` is symptom-first: error strings, observed
    behaviours, and situations — not mechanism. If a fuller symptom index
    exists, it sits at the top of the body.
@@ -121,13 +123,23 @@ pnpm build
 Both commands fetch the referenced public `SKILL.md` and validate recipe
 metadata. Inspect the generated Context Skill route when practical.
 
-If authorized, create one focused commit, push it, and open a PR against
+A new recipe adds catalog routes whose social cards must exist in
+`public/` — `pnpm build` fails on the `requireLocalImage` gate until they
+do. Run `scripts/generate-og-image.py` (the setup block at its top
+documents the one-off Python environment), then check `git status`:
+exactly the new recipe's card(s) should appear, and they belong in the
+submission commit. The generator is deterministic, so unrelated cards do
+not change.
+
+If authorized, create one focused commit — the recipe plus its generated
+og card(s) — push it, and open a PR against
 `getcolors/colors-website:main`. The PR body must include:
 
 - the Context Skill Standard checklist with each item's result;
 - source repository, skill path, and companion repository;
 - the `skills-ref validate` result;
 - the `npx skills use` load command;
+- the generated og card(s) for the new routes;
 - verification commands and results.
 
 Do not merge the PR. Catalog maintainers decide admission. Return the PR URL
