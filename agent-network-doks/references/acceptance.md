@@ -74,12 +74,30 @@ as a rollout timeout blamed on the application. Both ran live on the
 passing drain; the counterfactual paths (a suite refused mid-maintenance,
 a detach that actually stalled) have not been observed.
 
-## What delete would check — unverified
+## What delete checks — verified 2026-08-29
 
-The teardown order (workloads → PVCs waiting for CSI volumes → the LB
-Service waiting for the LB → namespaces → provider-side verification of
-volumes and LB via the DO API → adopt-mode repository deletion) is
-implemented and reviewed, with provider-side cleanup deliberately
-independent of cluster reachability — but **no delete has run against the
-live deployment**. Treat every claim in that flow as design intent until
-one has.
+One full guarded delete ran against the live deployment (create-mode
+registry), exit 0, zero warnings:
+
+- the teardown order held — workloads, then PVCs with a bounded wait for
+  the CSI volumes to LEAVE THE ACCOUNT, then the LB Service with a wait
+  for the LB to leave, then namespaces (99s in-cluster total);
+- the DO API confirmed both Kubernetes-managed billables — block volumes
+  and the load balancer — **absent at the provider** before the destroys,
+  which is the whole point of tearing down in-cluster first: both are
+  invisible to the infrastructure state, and destroying the cluster first
+  would orphan them;
+- the DNS and infrastructure destroys are fast (seconds — DOKS cluster and
+  registry deletion are async at the API), so the independent post-delete
+  audit matters: zero clusters, volumes and LBs, no registry, both names
+  unresolvable;
+- the one-run `COLORS_PAR_COMPUTE_PREVENT_DESTROY=false` override rendered
+  `prevent_destroy = false` for exactly that run, leaving the committed
+  guard intact;
+- local cleanup removed the kubeconfig, state, lego (ACME account and
+  certificate keys), and proofs — copy the proof artifacts out first if
+  you want them.
+
+Still unverified: adopt-mode teardown, where the registry survives and the
+profile repository is deleted through the API instead — that branch has
+never run.

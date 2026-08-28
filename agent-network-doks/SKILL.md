@@ -52,10 +52,11 @@ build and the same claims proven on DOKS.
 
 Everything here was verified against a live DOKS deployment (six real
 create runs, 2026-08-28, three of them full passes with every acceptance
-gate green including the five-disruption suite and a node drain) unless the
-entry says otherwise. Delete/teardown, adopt-registry mode, and long-term
-credential rotation have **not** run against the live platform; every claim
-about them is labeled.
+gate green including the five-disruption suite and a node drain; one full
+guarded delete, 2026-08-29, exit 0 with the provider confirming volumes,
+LB, cluster, registry and DNS absent) unless the entry says otherwise.
+Adopt-registry mode and long-term credential rotation have **not** run
+against the live platform; every claim about them is labeled.
 
 ## The reference implementation, and why this skill ships no assets
 
@@ -105,8 +106,10 @@ implements adopt-or-create keyed on one optional name key, with the tier
 key create-mode-only, a capacity preflight that checks the profile
 repository FIRST in adopt mode (reuse after a partial converge is not
 allocation), and teardown that deletes exactly the profile repository —
-never an adopted registry. Adopt mode and teardown are **implemented and
-reviewed, not live-run**.
+never an adopted registry. Teardown ran live 2026-08-29 in CREATE mode —
+the registry fell to the tofu destroy, provider-confirmed — while adopt
+mode (including its API-side repository deletion) remains **implemented
+and reviewed, not live-run**.
 
 Three registry facts that are live-verified:
 
