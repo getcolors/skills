@@ -1,0 +1,72 @@
+{
+  "skill_name": "agent-network-doks",
+  "evals": [
+    {
+      "id": 0,
+      "name": "pods-not-in-10-244",
+      "prompt": "porting our netbird agent-network setup from VKE to DOKS. on VKE we set the pod CIDR 10.244.0.0/16 in config and rendered it into the server's trustedHTTPProxies and the reverse proxy's NB_PROXY_TRUSTED_PROXIES, and every doc i can find says DOKS pods are also 10.244.0.0/16 by default. but on the new cluster PROXY protocol trust seems broken - client addresses come through wrong - and when i look, my pods have IPs like 10.110.0.57 and services are 10.111.x.x?? we created the cluster via terraform without setting any subnets. is my cluster misconfigured?",
+      "expected_output": "Should state the cluster is fine: a DOKS cluster created through the API/provider without cluster_subnet/service_subnet (legacy mode) gets platform-allocated ranges that are not the folklore 10.244.0.0/16 default - observed live as 10.110.x pods / 10.111.x services - so any CIDR rendered from the assumption is silently wrong. The fix is to treat both subnets as outputs: read cluster_subnet and service_subnet back from the cluster resource, substitute them at converge time, and assert a live pod IP and a live ClusterIP against the read-back values. Should warn against supplying subnets as input (API requires both and opts into VPC-native overlap constraints; auto-allocation is Control-Panel-only) and against carrying a pod-CIDR key in desired state at all.",
+      "files": [],
+      "assertions": [
+        "States the cluster is not misconfigured - DOKS allocated non-10.244 ranges is expected for API-created legacy-mode clusters",
+        "Identifies the rendered trusted-proxy CIDRs as the thing that is wrong, explaining the silent PROXY-protocol trust breakage",
+        "Prescribes reading cluster_subnet and service_subnet back from the cluster resource as outputs rather than assuming or configuring them",
+        "Recommends verifying live pod and Service IP membership against the read-back subnets",
+        "Does NOT recommend recreating the cluster with cluster_subnet=10.244.0.0/16 as the primary fix"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "dry-run-namespace-notfound",
+      "prompt": "i have a kubectl deploy script that validates every manifest with `kubectl apply --dry-run=server -f file.yaml` before really applying it. works for everything except one file where i create a test namespace plus a networkpolicy and two pods in it, all in one multi-doc yaml. the dry run fails with `Error from server (NotFound): error when creating \"/tmp/canary.yaml\": namespaces \"my-canary\" not found` repeated for each object - but the namespace is literally the first document in the same file! applying without the dry run works fine. is server-side dry run broken?",
+      "expected_output": "Should explain that kubectl apply --dry-run=server persists nothing - including the namespace the later documents in the same file need - so namespaced objects whose namespace is created in the same multi-doc file always fail the server dry run with NotFound. The fix is to apply the namespace for real first (namespaces are cheap and idempotent), then dry-run-validate the namespaced rest. Should not call the dry run broken and should not recommend dropping validation.",
+      "files": [],
+      "assertions": [
+        "Explains that a server-side dry run does not persist the namespace, so same-file namespaced objects fail NotFound by design",
+        "Prescribes applying the namespace for real first, then dry-running the remaining documents",
+        "Notes that namespace creation is idempotent/cheap so applying it outside the dry-run guard is safe",
+        "Does NOT recommend abandoning server-side dry-run validation entirely"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "502-after-server-rollout",
+      "prompt": "our converge automation restarts the self-hosted netbird-server statefulset (config change), waits with `kubectl rollout status statefulset/netbird-server --timeout=900s`, and then immediately calls the management REST API through our traefik ingress to reconcile settings. intermittently the whole run dies right after 'partitioned roll out complete' with `curl: (22) The requested URL returned error: 502`. the pod is Ready, the readiness probe is the OIDC discovery endpoint, and retrying the same call by hand 30 seconds later works every time. why does Ready lie?",
+      "expected_output": "Should explain that rollout status reports the kubelet's readiness verdict while the management plane behind the gateway can still answer 502 for a short window after restart - Ready is the kubelet's opinion, not the gateway's - and the fix is a bounded retry on the first management call of any code path that can run right after a server restart (e.g. 30x5s), rather than blanket retries on every call (which would mask real outages) or lengthening the readiness probe.",
+      "files": [],
+      "assertions": [
+        "Explains the gap between kubelet readiness and gateway-path reachability after a restart rather than blaming the readiness probe configuration",
+        "Prescribes a bounded retry on the first management call after a restart",
+        "Cautions against blanket-retrying every API call since that masks real outages",
+        "Does NOT prescribe sleeping a fixed unconditional delay as the primary fix"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "docr-second-registry-refused",
+      "prompt": "terraform apply fails creating a digitalocean_container_registry for our new project - the account already has a registry that another team's deployment owns. i tried giving ours a different name, same failure. do we just need to bump the subscription? and if we share their registry, our terraform destroy would nuke it, which i very much do not want.",
+      "expected_output": "Should explain DOCR registries are account-scoped and tier-limited (one on Starter/Basic, a cap of ~10 on Professional) with an account-global subscription, so the name is irrelevant - the limit is the account. The safe pattern is adopt-or-create: adopt the existing registry as a data source (never created, never destroyed by this deployment), own only a project-named repository inside it, delete exactly that repository via the API on teardown, and never mutate the account subscription from a deployment. Should note registry credentials are registry-wide (no repository scoping), so adopting extends that trust deliberately.",
+      "files": [],
+      "assertions": [
+        "Explains the account-scoped tier limit as the cause and that renaming cannot fix it",
+        "Recommends adopting the existing registry via a data source so destroy never touches it, owning only a project-scoped repository inside it",
+        "Scopes teardown to deleting exactly the owned repository through the API",
+        "Warns that DOCR credentials are registry-wide, not repository-scoped",
+        "Does NOT recommend mutating the account subscription tier from the deployment's own automation as the default answer"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "flaky-positive-control",
+      "prompt": "we probe our isolated agent pod's SOCKS5 path in CI after every deploy: a bunch of forbidden destinations that must time out, then one control probe to the proxy's overlay address that must answer. it failed today with 'the overlay address is not reachable' right after a deploy that rolled the client pod - but when i ssh'd in 10 minutes later the exact same curl through the listener worked, both by IP and by hostname. do i just slap retries on all the probes so CI stops flaking?",
+      "expected_output": "Should diagnose the transient: a freshly rolled client pod's peer path (ICE renegotiation) can still be settling after readiness passes, and a single-shot positive control that runs after minutes of deliberately-timing-out denial probes can land in that window. The fix is asymmetric: bounded retries on POSITIVE controls only; denial probes must stay single-shot strict because for them any success is a real, immediate failure and retrying them would hide real holes. Must NOT endorse retrying all probes uniformly.",
+      "files": [],
+      "assertions": [
+        "Attributes the failure to the settling peer path after the client pod roll rather than to the isolation being broken",
+        "Prescribes bounded retries on the positive control",
+        "Explicitly keeps denial probes single-shot because a retried denial probe hides real holes",
+        "Rejects the proposal to add retries to all probes uniformly"
+      ]
+    }
+  ]
+}

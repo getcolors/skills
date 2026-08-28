@@ -11,7 +11,7 @@ Package Skill and its deployment; `create-context-skill` distills a verified
 build into a Context Skill; `submit-package-skill` and
 `submit-context-skill` govern catalog admission. **Context Skills**
 (`agent-network-single-node`, `agent-network-kubernetes`,
-`posthog-single-node`, `rybbit-single-node`)
+`agent-network-doks`, `posthog-single-node`, `rybbit-single-node`)
 carry knowledge distilled from a verified build — symptom-routed traps,
 contracts, and acceptance doctrine. The normative definition, the five
 required artifacts, and the no-second-copy rule live in
