@@ -117,7 +117,7 @@ The task is complete only when:
 Catalog publication is separate from creation and deployment. Do not publish automatically. After the definition of done is satisfied, mention this optional next step only if the user authorized making the Package Skill public:
 
 ```sh
-npx skills use getcolors/skills@submit-package-skill
+npx skills use "https://github.com/getcolors/skills" --skill "submit-package-skill"
 ```
 
 That Agent Skill validates the completed Package Skill against the catalog definition and opens a recipe PR. It is also the submission path for existing Package Skills, so do not duplicate its workflow here.
@@ -133,7 +133,7 @@ Phase 3 session-notes file is the harvest input; keep it until distillation
 is done or declined:
 
 ```sh
-npx skills use getcolors/skills@create-context-skill
+npx skills use "https://github.com/getcolors/skills" --skill "create-context-skill"
 ```
 
 Distillation is optional and separate; do not fold it into the build.

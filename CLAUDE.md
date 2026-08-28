@@ -34,7 +34,7 @@ different mechanism and nothing here applies to them:
 |---|---|---|
 | Named | `create-package-skill`, `refresh-oci-token` | `package-once-green`, `package-walter-green` |
 | Scope | an agent workflow or workstation operation | one project's desired state |
-| Main use | `npx skills use getcolors/skills@create-package-skill` | `npx skills use getcolors/<pkg>@<skill>` |
+| Main use | `npx skills use "https://github.com/getcolors/skills" --skill "create-package-skill"` | `npx skills use "https://github.com/getcolors/<pkg>" --skill "<skill>"` |
 | Persistent install | only when a skill needs local files, such as `refresh-oci-token` | `.agents/skills/` via `npx skills add` |
 | Ships | instructions and, optionally, a standalone script | a launcher that resolves a SHA-pinned library |
 
@@ -62,9 +62,10 @@ description and the full index moves to the top of the body
 
 ## Using create-package-skill
 
-Use `npx skills use getcolors/skills@create-package-skill`. It fetches the
-workflow from GitHub and prints it for the agent's next request; it deliberately
-does not install anything in the current project.
+Use `npx skills use "https://github.com/getcolors/skills" --skill
+"create-package-skill"`. It fetches the workflow from GitHub and prints it for
+the agent's next request; it deliberately does not install anything in the
+current project.
 
 ## The installed refresh-oci-token copy is separate
 

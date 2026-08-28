@@ -21,7 +21,7 @@ Skills and do not provision a project from `colors.yml` themselves.
 Give the skill to your coding agent for its next request:
 
 ```sh
-npx skills use getcolors/skills@create-package-skill
+npx skills use "https://github.com/getcolors/skills" --skill "create-package-skill"
 ```
 
 This is the primary way to use it. The command reads the skill directly from
@@ -33,7 +33,7 @@ the current project.
 After a Package Skill is complete and publication is explicitly authorized:
 
 ```sh
-npx skills use getcolors/skills@submit-package-skill
+npx skills use "https://github.com/getcolors/skills" --skill "submit-package-skill"
 ```
 
 The workflow adds a catalog recipe and opens a PR; it does not merge the PR,
