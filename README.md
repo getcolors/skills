@@ -10,8 +10,9 @@ Skills and do not provision a project from `colors.yml` themselves.
 |---|---|
 | [`create-package-skill`](create-package-skill/SKILL.md) | Guides an agent through creating a Colors Package Skill and a deployment, with explicit boundaries around credentials, infrastructure changes, and authorization. |
 | [`agent-network-single-node`](agent-network-single-node/SKILL.md) | Carries what a single-node NetBird Agent Network deployment needs beyond the docs: the gateway-plus-isolated-agent topology, the endpoint minted by the settings POST rather than the first provider, the defective per-name proxy ACME and its wildcard DNS-01 workaround, and acceptance gates that prove the isolation claim. Points at `getcolors/agent-network` as the reference implementation instead of shipping file copies. |
-| [`posthog-single-node`](posthog-single-node/SKILL.md) | Carries the PostHog-specific knowledge a single-node deployment needs: the ten-container topology, the ClickHouse Keeper, macro and named-collection configuration its migrations require, the capture/plugin-server ingestion chain, converge ordering, and a catalogue of ~30 failures that each report success. Ships the working files and a validator. |
-| [`rybbit-single-node`](rybbit-single-node/SKILL.md) | Covers the distance between a single-node Rybbit analytics stack that runs and one you can trust: the six-container topology, the one provider-coupled OpenTofu file that lets the same converge run anywhere with an SSH port, ClickHouse backups proven by restoring them, and acceptance checks that catch a stack which looks healthy and stores nothing. Ships the working files and a validator. |
+| [`agent-network-kubernetes`](agent-network-kubernetes/SKILL.md) | The Kubernetes sibling: the two-pod netstack/SOCKS5 application (no TUN, no capabilities), the 0.77.1 client facts only a live VKE converge surfaces — flags silently ignored on `service run`, the embedded proxy peer absent from `/api/peers` whose overlay address churns per restart, the server's strict-base64 keys and mandatory GeoLite egress — and isolation probed from both sides of the SOCKS5 listener. Points at `getcolors/agent-network-k8s` as the reference implementation. |
+| [`posthog-single-node`](posthog-single-node/SKILL.md) | Carries the PostHog-specific knowledge a single-node deployment needs: the ten-container topology, the ClickHouse Keeper, macro and named-collection configuration its migrations require, the capture/plugin-server ingestion chain, converge ordering, and a catalogue of ~30 failures that each report success. Points at `getcolors/posthog` as the reference implementation instead of shipping file copies. |
+| [`rybbit-single-node`](rybbit-single-node/SKILL.md) | Covers the distance between a single-node Rybbit analytics stack that runs and one you can trust: the six-container topology, the one provider-coupled OpenTofu file that lets the same converge run anywhere with an SSH port, ClickHouse backups proven by restoring them, and acceptance checks that catch a stack which looks healthy and stores nothing. Points at `getcolors/rybbit` as the reference implementation instead of shipping file copies. |
 | [`submit-package-skill`](submit-package-skill/SKILL.md) | Validates an existing Package Skill and opens the recipe PR that submits it to the getcolors.ai Package Skills Catalog. |
 | [`clipboard-screenshot`](clipboard-screenshot/SKILL.md) | Pulls the image on the user's clipboard into the agent's context. Reads the local clipboard bridge on `/tmp/clipboard.sock`, saves the bytes under their real image extension, and separates the failure modes — bridge down, clipboard empty, clipboard holding something that is not an image — so the agent asks for the right fix. |
 | [`refresh-oci-token`](refresh-oci-token/SKILL.md) | Renews the OCI CLI session token. Extends it in place while it is still valid; falls back to a browser login when it has expired, adding the login URL to the current Emacs server's kill ring so a headless host can complete the flow. |
@@ -89,8 +90,9 @@ for it.
 
 Some skills here are just `SKILL.md`. The three optional directories exist for a
 skill carrying more than an agent should hold in context at once: keep `SKILL.md`
-the map, and point at `references/` for the detail. `posthog-single-node` and
-`rybbit-single-node` use all three; `clipboard-screenshot` uses `scripts/` alone.
+the map, and point at `references/` for the detail. The Context Skills use
+`references/` and `evals/` (never `assets/` — their companions own the working
+files); `clipboard-screenshot` uses `scripts/` alone.
 
 The `description` is routing text: it is all an agent sees when deciding whether
 the skill applies, so name the symptoms someone would actually hit — the error

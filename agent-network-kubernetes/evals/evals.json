@@ -1,0 +1,76 @@
+{
+  "skill_name": "agent-network-kubernetes",
+  "evals": [
+    {
+      "id": 0,
+      "name": "client-ignores-flags-readonly-fs",
+      "prompt": "trying to run the netbird client 0.77 in a hardened k8s pod (restricted PSA, readOnlyRootFilesystem, non-root). my entrypoint starts it with `netbird service run --config /var/lib/netbird/config.json --daemon-addr unix:///var/lib/netbird/daemon.sock --log-file console` but the pod logs show `Failed to write to log, can't make directories for new logfile: mkdir /var/log/netbird: read-only file system` and then `Error: listen daemon interface: listen unix /var/run/netbird.sock: bind: read-only file system`. it's binding the DEFAULT socket like my flags aren't even there. --help lists both flags. am i holding it wrong?",
+      "expected_output": "Should state that on the pinned 0.77.1 client `service run` silently ignores --daemon-addr and --log-file (verified with the flag before and after the subcommand), and the fix is environment variables: NB_DAEMON_ADDR and NB_LOG_FILE (plus the NB_* netstack settings) set as pod env so the daemon, the CLI, readiness probes and kubectl exec all inherit them. Should mention USER/HOME being required for `netbird up` under a passwd-less uid, and that the profile config default is already /var/lib/netbird/default.json.",
+      "files": [],
+      "assertions": [
+        "States that service run silently ignores --daemon-addr and --log-file on this build rather than blaming the user's flag syntax",
+        "Recommends NB_DAEMON_ADDR and NB_LOG_FILE environment variables as the fix",
+        "Recommends setting the env on the pod/container so the CLI and probes inherit it, not just the entrypoint process",
+        "Mentions USER (and HOME) being needed for netbird up when the uid has no passwd entry, or flags it as the next failure",
+        "Does NOT suggest making the root filesystem writable or dropping the restricted security context"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "endpoint-dead-after-proxy-restart",
+      "prompt": "our agent network on kubernetes was green for days. this morning we rolled the reverse-proxy deployment for a config tweak and now the agent's keyless calls just hang - HTTP 000 from inside the agent pod. `netbird status --json` in the client pod is weird: it lists TWO peers, both with fqdns like proxy-<gibberish>-<numbers>.netbird.selfhosted, one 'Connecting' forever and one 'Idle'. GET /api/peers only shows our agent, no proxy at all. dns records didn't change. what broke?",
+      "expected_output": "Should explain that the reverse proxy is an embedded proxy peer that never appears in /api/peers - the client's network map is the only consumer-visible source of its overlay address; that every proxy restart is a NEW registration with a NEW overlay address, so any static endpoint-hostname-to-overlay mapping (hostAliases or equivalent, required because netstack mode has no NetBird DNS zone) went stale the moment the pod rolled; and that stale registrations linger beside the replacement, so the live proxy is the newest registration (the xid in the synthesized fqdn is k-sortable - greatest id wins). Fix: re-read the map, re-render the mapping, roll the client (re-run the converge), and add a drift check before probe runs.",
+      "files": [],
+      "assertions": [
+        "Explains that the embedded proxy peer never appears in /api/peers and the client's network map is the source of its overlay address",
+        "States that a proxy restart creates a new registration with a new overlay address, staling any static endpoint mapping",
+        "Explains the two-peer listing as a stale registration lingering beside the live one",
+        "Gives newest-registration selection (k-sortable xid in the fqdn, or equivalent recency rule) rather than expecting exactly one peer",
+        "Recommends reconciling the mapping and rolling the client (re-running the converge) as the heal",
+        "Does NOT attribute the failure to DNS records, the firewall, or the load balancer"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "server-crashloop-geolite-base64",
+      "prompt": "self-hosting the combined netbird-server 0.77 on a kubernetes cluster with default-deny networkpolicies. the pod crashloops. first boot it died with `failed to create field encryptor: decode encryption key: illegal base64 data at input byte 40` - i generate the keys with `openssl rand -base64 32 | tr -d '\\n='` like our other services. i fixed a key by hand and now it dies with `could not initialize geolocation service: failed to get database filename: Head \"https://pkgs.netbird.io/geolocation-dbs/GeoLite2-City/download?suffix=tar.gz\": dial tcp: lookup pkgs.netbird.io: i/o timeout`. do i really have to give this thing internet?",
+      "expected_output": "Should identify both causes: the datastore/cookie encryption keys must be strict base64 with padding (stripping '=' produces the illegal-base64 crash; only a plain shared secret like the relay auth tolerates it), and the server refuses to boot without downloading its GeoLite database on first start, so a default-deny namespace needs an explicit egress allowance for the server - kube-dns plus CIDR-bounded TCP 443 - documented as a deliberate matrix row. Should note the DB caches on the datastore volume, and warn that if a server ever RAN with a key, that key is create-once (a regenerated key orphans the peer database silently); a never-booted crashloop is safe to regenerate.",
+      "files": [],
+      "assertions": [
+        "Identifies stripped base64 padding as the cause of the illegal-base64 crash and prescribes keeping padding for the datastore/cookie keys",
+        "States that the server requires GeoLite egress at first boot and the fix is an explicit DNS + 443 egress allowance for the server pod",
+        "Mentions the database being cached after first fetch, or that the allowance should be a documented policy row",
+        "Warns that an encryption key a server has actually run with is create-once and must never be regenerated, while a never-booted crashloop is safe to reset",
+        "Does NOT suggest disabling NetworkPolicy enforcement or granting cluster-wide egress"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "socks-isolation-test-design",
+      "prompt": "we run an isolated agent pod on k8s whose only networkpolicy egress is a netbird socks5 pod (netstack mode), and claude code in the pod talks to our agent-network endpoint through it. security review asked us to PROVE the agent can't reach anything else. my current test curls a few public IPs from the agent container and they time out, so I was going to call it done. also fyi our first attempt at a v6 check failed the pod because it 'has an IPv6 default route' but the cluster is VKE and that seems to just... be there?",
+      "expected_output": "Should say raw-TCP-from-the-agent is only half the claim: NetworkPolicy cannot constrain what a CONNECT names, so the test must also probe THROUGH the SOCKS5 listener - public IPs, hostname-form CONNECTs to public names, the metadata address, the API server, ClusterIPs, and overlay-adjacent guesses must all fail, with the proxy's overlay address answering as the control (and the outer control being the SOCKS5 port itself), so breakage can't masquerade as isolation. On IPv6: VKE pods carry a ULA and link-local default route as dual-stack CNI plumbing - assert per-family reachability (public v6 must be unreachable), not route-table shape. Ideally also mentions probe hygiene (capture http_code without doubling 000) or drift-checking the overlay mapping before probing.",
+      "files": [],
+      "assertions": [
+        "States that NetworkPolicy does not constrain CONNECT destinations, so probes must also go through the SOCKS5 listener",
+        "Lists forbidden inner-probe targets including hostname-form CONNECTs and at least the metadata address or API server or overlay-adjacent guesses",
+        "Requires a control probe that must succeed (the overlay address through the proxy, and/or the SOCKS5 port from the agent) so failures prove isolation rather than breakage",
+        "Explains the IPv6 default route as VKE dual-stack plumbing and prescribes per-family reachability probing instead of route-shape assertions",
+        "Does NOT accept the outer raw-TCP timeouts alone as proof"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "config-file-poisoned-api-netbird-io",
+      "prompt": "k8s netbird client pod (netstack) with persistent state on a PVC. enrollment failed once during setup (our fault, env issue) and ever since, every restart the daemon spams `grpc: addrConn.createTransport failed to connect to {Addr: \"api.netbird.io:443\"...  lookup api.netbird.io: i/o timeout`. my entrypoint checks 'if the config file exists, reconnect with netbird up --management-url https://our-domain' and the file IS there, so it takes the reconnect path, but it keeps dialing api.netbird.io. we self-host, nothing should ever talk to api.netbird.io.",
+      "expected_output": "Should explain that the daemon writes default.json at first start, before any login, with the default api.netbird.io management URL - so a failed first enrollment persists poison onto the PVC, and a config file's existence is not evidence of enrollment. The entrypoint must decide by daemon status (NeedsLogin = no identity) and treat state whose management URL is foreign as poison: wipe default.json/profile state, restart the daemon, and enroll fresh with the setup key; an enrolled identity always carries the right URL. May add that if the server-side peer record survived, a re-mint needs the stale peer removed first.",
+      "files": [],
+      "assertions": [
+        "Explains that default.json is written at first daemon start with the default api.netbird.io URL, before any successful login",
+        "States that config-file existence must not be used as the enrollment signal; the daemon's status (NeedsLogin) is",
+        "Prescribes wiping the poisoned state and enrolling fresh rather than more `up` invocations over it",
+        "Notes that an enrolled identity persists the correct management URL, so the poison only comes from a failed first enrollment",
+        "Does NOT recommend allowing egress to api.netbird.io"
+      ]
+    }
+  ]
+}
