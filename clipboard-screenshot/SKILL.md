@@ -1,14 +1,21 @@
 ---
 name: clipboard-screenshot
-description: Pull the image sitting on the user's clipboard into the conversation so you can actually look at it. A local bridge exposes the clipboard as a Unix socket at /tmp/clipboard.sock; this skill retrieves the bytes, saves them as a real image file, and reads that file into context. Use it whenever the user points at something visual you cannot see — "look at my clipboard", "I just took a screenshot", "check out this error", "why does this look wrong", "here's the design", "see the paste" — including when they only imply they copied something, and including when they describe on-screen content without giving you a file path. Reach for it instead of guessing, asking them to describe the picture, or asking them to save the file somewhere first.
+description: Pull the image sitting on the user's clipboard into the conversation so you can actually look at it. A local bridge exposes the clipboard as a per-user Unix socket (normally $XDG_RUNTIME_DIR/clipboard.sock; CLIPBOARD_SOCKET overrides); this skill retrieves the bytes, saves them as a real image file, and reads that file into context. Use it whenever the user points at something visual you cannot see — "look at my clipboard", "I just took a screenshot", "check out this error", "why does this look wrong", "here's the design", "see the paste" — including when they only imply they copied something, and including when they describe on-screen content without giving you a file path. Reach for it instead of guessing, asking them to describe the picture, or asking them to save the file somewhere first.
 ---
 
 # Clipboard screenshot
 
 The user's clipboard is invisible to you. A small bridge on this machine makes it
-reachable: connect to the Unix socket `/tmp/clipboard.sock` and it writes the
-clipboard's current contents to you and closes. When the clipboard holds a
-screenshot, those bytes are a PNG (sometimes another image format).
+reachable: connect to its Unix socket and it writes the clipboard's current
+contents to you and closes. When the clipboard holds a screenshot, those bytes
+are a PNG (sometimes another image format).
+
+The socket is per-user, because several people can share one machine and each
+runs their own bridge. The bundled script finds it by trying, in order:
+`$CLIPBOARD_SOCKET` (explicit override), `$XDG_RUNTIME_DIR/clipboard.sock` (the
+normal place), `/tmp/clipboard-<uid>/clipboard.sock`, and finally the legacy
+shared `/tmp/clipboard.sock` — the last only when the socket file belongs to the
+invoking user, so a grab can never read (or be fed by) someone else's bridge.
 
 That gives you a path from "the user copied a picture" to "you are looking at the
 picture" — the missing step is that image bytes only enter your context by way of
@@ -68,13 +75,13 @@ The script separates the failure modes because they call for different responses
 
 | Exit | Meaning | What to do |
 |---|---|---|
-| 3 | Nothing to talk to — either no socket file, or a stale one with nothing listening | The clipboard bridge is not running. Say so and ask the user to start it, or to save the image to a file and give you the path. Do not retry, and do not ask them to re-copy — the bridge being down has nothing to do with what is on the clipboard. |
+| 3 | Nothing to talk to — no socket at any candidate path, a stale one with nothing listening, or the only socket found belongs to another user of this machine | The user's clipboard bridge is not running. Say so and ask the user to start it, or to save the image to a file and give you the path. Do not retry, and do not ask them to re-copy — the bridge being down has nothing to do with what is on the clipboard. If the message says the socket belongs to another user, never work around that by pointing `CLIPBOARD_SOCKET` at it: that is someone else's clipboard. |
 | 4 | Connected, but the clipboard sent nothing | The clipboard really is empty. Ask the user to copy the screenshot again; a copy that looked successful sometimes is not. |
 | 5 | Clipboard holds something else | Report the type it found. If it turns out to be text the user meant to paste, they can paste it into the chat directly. |
 | 6 | Connected, then the bridge never finished sending | The bridge is wedged rather than absent. Worth one retry; if it times out again the user needs to restart it. |
 
 Exit 3 and exit 4 are worth keeping straight. A bridge that dies leaves its socket
-file sitting in `/tmp`, so the file existing proves nothing — and telling someone
+file sitting on disk, so the file existing proves nothing — and telling someone
 their clipboard is empty when really the bridge is gone sends them off re-copying
 a screenshot that was there all along.
 

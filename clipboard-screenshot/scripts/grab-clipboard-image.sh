@@ -3,31 +3,84 @@
 #
 # Usage: grab-clipboard-image.sh [output-directory]
 #
+# The clipboard bridge socket is found in this order:
+#   1. $CLIPBOARD_SOCKET                       explicit override, used as-is
+#   2. $XDG_RUNTIME_DIR/clipboard.sock         the per-user default
+#   3. /tmp/clipboard-<uid>/clipboard.sock     per-user fallback without logind
+#   4. /tmp/clipboard.sock                     legacy shared path, used only
+#                                              when the socket file is owned by
+#                                              the invoking user
+# On a multi-user machine every user runs their own bridge on their own path;
+# the legacy path is never followed to another user's socket, because that
+# would read (or let someone plant) someone else's clipboard.
+#
 # Prints two lines on success:
 #   path: /abs/path/to/clipboard-<timestamp>.<ext>
 #   type: PNG image data, 670 x 586, 8-bit/color RGBA, non-interlaced
 #
 # Exit codes are distinct so the caller can tell the failure modes apart:
-#   3  unreachable      — no socket file, or nothing listening on it
+#   3  unreachable      — no socket at any candidate path, nothing listening,
+#                         or the only socket found belongs to another user
 #   4  no data          — connected fine, but the clipboard sent nothing
 #   5  not an image     — clipboard holds something else
 #   6  timed out        — connected, then the bridge never finished sending
+# Other nonzero exits are environment errors (e.g. the default output
+# directory exists but is owned by another user).
 
 set -euo pipefail
 
-SOCKET="${CLIPBOARD_SOCKET:-/tmp/clipboard.sock}"
-OUTDIR="${1:-/tmp/clipboard-grabs}"
+owner_uid() { stat -c %u "$1" 2>/dev/null || stat -f %u "$1"; }
+
+if [ -n "${CLIPBOARD_SOCKET:-}" ]; then
+  SOCKET="$CLIPBOARD_SOCKET"
+else
+  SOCKET=""
+  candidates=()
+  [ -n "${XDG_RUNTIME_DIR:-}" ] && candidates+=("$XDG_RUNTIME_DIR/clipboard.sock")
+  candidates+=("/tmp/clipboard-$(id -u)/clipboard.sock")
+  for c in "${candidates[@]}"; do
+    if [ -S "$c" ]; then
+      SOCKET="$c"
+      break
+    fi
+  done
+  if [ -z "$SOCKET" ] && [ -S /tmp/clipboard.sock ]; then
+    if [ "$(owner_uid /tmp/clipboard.sock)" = "$(id -u)" ]; then
+      SOCKET=/tmp/clipboard.sock
+    else
+      echo "error: /tmp/clipboard.sock belongs to another user and none of your own sockets exist (checked: ${candidates[*]}) — refusing to read another user's clipboard; your bridge is not running" >&2
+      exit 3
+    fi
+  fi
+  if [ -z "$SOCKET" ]; then
+    echo "error: no clipboard socket found (checked: ${candidates[*]} /tmp/clipboard.sock) — the clipboard bridge is not running" >&2
+    exit 3
+  fi
+fi
 
 if [ ! -S "$SOCKET" ]; then
   echo "error: no clipboard socket at $SOCKET (the clipboard bridge is not running)" >&2
   exit 3
 fi
 
+if [ -n "${1:-}" ]; then
+  OUTDIR="$1"
+  mkdir -p "$OUTDIR"
+else
+  # The default must be per-user: a shared /tmp directory is owned by whoever
+  # ran first, and everyone else's mktemp fails against its 0755.
+  OUTDIR="${XDG_RUNTIME_DIR:-/tmp}/clipboard-grabs-$(id -u)"
+  mkdir -p -m 0700 "$OUTDIR"
+  if [ "$(owner_uid "$OUTDIR")" != "$(id -u)" ]; then
+    echo "error: $OUTDIR exists but belongs to another user; pass an output directory explicitly" >&2
+    exit 1
+  fi
+fi
+
 nc_err="$(mktemp)"
 cleanup_err() { rm -f "$nc_err"; }
 trap cleanup_err EXIT
 
-mkdir -p "$OUTDIR"
 raw="$(mktemp "$OUTDIR/.clipgrab-XXXXXX")"
 trap 'rm -f "$raw" "$nc_err"' EXIT
 

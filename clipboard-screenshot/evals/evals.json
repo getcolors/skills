@@ -5,7 +5,7 @@
       "id": 0,
       "name": "explicit-clipboard-request",
       "prompt": "grab whatever's on my clipboard right now and tell me what it shows",
-      "expected_output": "Retrieves the image from /tmp/clipboard.sock, saves it with a correct image extension, reads it, and describes the actual contents (a dark terminal screenshot showing shell output about CLAUDE.md/devenv.nix, a package skill symlink, an ssh IdentityFile ~/.ssh/walter-liliana, and OCI instance details).",
+      "expected_output": "Retrieves the image from the user's clipboard bridge socket, saves it with a correct image extension, reads it, and describes the actual contents (a dark terminal screenshot showing shell output about CLAUDE.md/devenv.nix, a package skill symlink, an ssh IdentityFile ~/.ssh/walter-liliana, and OCI instance details).",
       "files": [],
       "assertions": [
         "Retrieved the clipboard image and saved it as a file in the outputs directory",
