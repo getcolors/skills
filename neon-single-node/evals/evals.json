@@ -1,0 +1,61 @@
+{
+  "skill_name": "neon-single-node",
+  "evals": [
+    {
+      "id": 0,
+      "name": "compute-permission-denied",
+      "prompt": "trying to self host neon on a single vps with docker compose. pageserver, one safekeeper, broker all fine, but the compute container just restart-loops. logs are useless - literally two lines, 'INFO compute build_tag: release-compute-9073' then 'Error: Permission denied (os error 13)'. no filename, nothing. the config json i mount at /var/db/postgres/configs/config.json is there, i checked with docker exec on the pageserver. permissions are 600 root root which should be fine since docker runs as root right?",
+      "expected_output": "Should identify that the compute container does not run as root — it runs as the postgres user, uid 1000 — so a root-owned 0600 spec is unreadable and compute_ctl dies with exactly that bare error. The fix is chown 1000:1000 and a tight readable mode (0400), enforced everywhere the file is written (initial render, any config-unchanged path, rotation and its rollback). Should note the verifiers inside are salted hashes, not plaintext, so uid-1000 readability is acceptable.",
+      "files": [],
+      "assertions": [
+        "States the compute container runs as uid 1000 / postgres, not root",
+        "Identifies the root-owned 0600 spec file as the cause of the bare 'Permission denied (os error 13)'",
+        "Prescribes chown 1000:1000 with a readable mode such as 0400",
+        "Warns that every writer of the file (including rotation or rollback paths) must preserve that ownership",
+        "Does NOT suggest running the container as root or chmod 777"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "stale-tmp-lock-after-reboot",
+      "prompt": "our self hosted neon box rebooted last night and now postgres won't come back. compute container is up (restart: unless-stopped) but crash looping: 'FATAL: lock file \"/tmp/.s.PGSQL.55433.lock\" already exists' / 'HINT: Is another postmaster (PID 22) using socket file'. there is definitely no other postgres running. i've restarted the container like five times, same thing every time. storage containers are all fine.",
+      "expected_output": "Should explain that the container's writable layer preserves /tmp across stop/start and reboot, so the stale postgres socket lock survives and kills every subsequent boot — restarting can never fix it. The immediate fix is to recreate the container (docker compose up -d --force-recreate compute), and the durable fixes are a tmpfs mount on /tmp plus treating compute as recreate-only (which is also required for spec changes to apply, since compute_ctl reconciles roles at startup). Should reassure that compute local state is disposable — recreation loses nothing because the data lives in the pageserver/safekeeper.",
+      "files": [],
+      "assertions": [
+        "Explains the stale lock survives in the container's writable /tmp across restarts and reboots",
+        "Tells the user to recreate the container with --force-recreate rather than restart it again",
+        "Recommends a tmpfs on /tmp as the durable fix",
+        "Notes compute local state is disposable so recreation is safe",
+        "Mentions the recreate-only doctrine also being how spec/role changes take effect"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "r2-remote-storage-access-denied",
+      "prompt": "wiring my self-hosted neon's ops scripts to cloudflare r2 with a bucket-scoped api token. the weird thing: the pageserver uploads layers to the bucket fine with these exact credentials, and terraform writes state to it too, but my rclone commands in the bootstrap script fail every single write with 'AccessDenied: Access Denied status code: 403'. reads with rclone work! and when i tried piping into rclone rcat instead i got 'NotImplemented: Not Implemented status code: 501'. same key, same bucket. what is rclone doing differently?",
+      "expected_output": "Should explain that older rclone (e.g. Ubuntu 24.04's 1.60) precedes the first upload with a bucket check/create, and CreateBucket is denied for a bucket-scoped R2 token — surfacing as a write AccessDenied; fix with no_check_bucket. The 501 is rclone's unknown-size streaming upload (rcat), unsupported against R2 on that vintage: stage a known-size temp file and use copyto, plus no_head to keep the first attempt clean. Should mention env-based rclone config as an option and that newer rclone may not need these flags.",
+      "files": [],
+      "assertions": [
+        "Attributes the write AccessDenied to rclone's pre-upload bucket check/create being denied for a bucket-scoped token",
+        "Prescribes the no_check_bucket option (flag, env, or config)",
+        "Attributes the 501 to rcat's streaming upload and prescribes known-size copyto instead",
+        "Mentions no_head (or the post-upload verification) as part of keeping uploads clean",
+        "Does NOT tell the user their token lacks write permission"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "single-node-durability-claim",
+      "prompt": "writing the runbook for our single node self hosted neon (pageserver + 1 safekeeper + compute on one hetzner box, remote storage on S3). my draft says: 'WAL is continuously archived to S3, so if we lose the machine we can rebuild with at most a few seconds of data loss.' a colleague claims that's wrong and we'd lose more. who's right? i can see the safekeeper uploading 16MB segments to the bucket, and the pageserver has remote storage configured too. also how would i even test this without nuking the real server?",
+      "expected_output": "Should side with the colleague: a fresh safekeeper cannot serve its offloaded WAL back, so a full host loss recovers only what the pageserver had uploaded — the RPO is the activity since the pageserver's last checkpoint upload (minutes, on its own cadence), not seconds of WAL. Should distinguish the partial-loss case: wiping pageserver local state on a surviving host loses nothing because the live safekeeper replays WAL. Should propose non-destructive rehearsals: stop compute+pageserver, wipe the pageserver's local tenants dir, re-attach at a higher generation, read data back; separately delete the safekeeper volume and confirm the walproposer re-bootstraps it. Should warn that remote_consistent_lsn reads 0/0 right after restart/attach and that release images have no force-checkpoint API (pg_switch_wal only closes WAL segments).",
+      "files": [],
+      "assertions": [
+        "States that a fresh safekeeper cannot recover/serve its offloaded WAL, so seconds-level RPO is wrong for full host loss",
+        "Bounds full-host RPO by the pageserver's last checkpoint/layer upload",
+        "Distinguishes that pageserver-only local-state loss on a surviving host loses nothing (safekeeper replays)",
+        "Describes a rehearsal wiping pageserver local state and re-attaching at a higher generation",
+        "Warns that remote_consistent_lsn reads 0/0 after a restart or fresh attach, or that no force-checkpoint API exists on release builds"
+      ]
+    }
+  ]
+}
