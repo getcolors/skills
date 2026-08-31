@@ -89,7 +89,9 @@ rclone vintage, and `copyto` trips a 501 on its first attempt's post-upload
 verification. Fix: never `rcat` — stage a known-size tmpfile and `copyto` —
 plus `RCLONE_CONFIG_R2_NO_HEAD=true`. Configure rclone entirely from env
 (`RCLONE_CONFIG_R2_TYPE=s3`, `PROVIDER=Cloudflare`, keys, `ENDPOINT`,
-`REGION=auto`): no config file to manage or leak.
+`REGION=auto`): no config file to manage or leak. Both rclone entries are
+vintage-bound — see the retest conditions in `pins.md` before carrying the
+flags onto a newer rclone.
 
 ## `remote_consistent_lsn` is `0/0` — and it is not (necessarily) broken
 
@@ -120,8 +122,9 @@ Related: psql `-tAc` with multiple statements prints command tags
 
 ## Ubuntu 24.04: `No package matching 'awscli' is available`
 
-awscli v1 left the archive and v2 never entered it. Use rclone (see above)
-or ship the AWS CLI yourself.
+Verified only this far: `apt` on the Vultr Ubuntu 24.04 image (os id 2284)
+resolves no `awscli` package at all. Use rclone (see above) or ship the AWS
+CLI yourself.
 
 ## A 0-byte ownership marker
 

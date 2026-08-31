@@ -40,9 +40,11 @@ whose `--dev` flag is lost to a missing line continuation. The gap this skill
 covers is the distance between that and a deployment whose durability claims
 were proven: one storage image + one compute image on one host, Cloudflare R2
 as the remote storage, credentialed auth, and recovery that was rehearsed,
-not assumed. That distance was measured on a live build — twelve converges
-against the real platform, a three-round adversarial plan review, a two-round
-post-build inspection, and recovery/rotation rehearsals on the live host.
+not assumed. That distance was measured on a live build — fifteen converges
+against the real platform (twelve iterating green, one through the pinned
+launcher, one each for the red and blue ports), a three-round adversarial
+plan review, a two-round post-build inspection, and recovery/rotation
+rehearsals on the live host.
 
 Everything here was verified against a running deployment unless it says
 otherwise. Where this skill contradicts the docs, the pinned source or a live
