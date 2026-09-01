@@ -1,0 +1,145 @@
+{
+  "skill_name": "n8n-single-node",
+  "evals": [
+    {
+      "id": 0,
+      "name": "encryption-key-mismatch-after-bad-first-boot",
+      "prompt": "self hosted n8n in docker, postgres backend. it was running fine yesterday, i fixed a typo in my compose file and now the container won't start at all: 'Error: Mismatching encryption keys. The encryption key in the settings file /home/node/.n8n/config does not match the N8N_ENCRYPTION_KEY env var.' the env var is definitely right, i can echo it in the container. can i just delete /home/node/.n8n/config and let it regenerate?",
+      "expected_output": "Should explain n8n writes the encryption key into the settings file on FIRST boot and refuses to start afterwards if the env var differs, so the poisoning happened at an earlier boot than the error. Should NOT simply say yes to deleting the file: deleting is safe only if the database holds no encrypted credentials, because that file is the only thing that can decrypt them. Should ask whether any credentials are stored, and if so tell the user to restore the ORIGINAL key instead.",
+      "files": [],
+      "assertions": [
+        "States that n8n persists the key into the settings file on first boot",
+        "Warns that deleting the settings file destroys the ability to decrypt stored credentials",
+        "Makes the delete conditional on the database holding no credentials",
+        "Suggests restoring the original key as the correct fix when credentials exist",
+        "Does NOT unconditionally recommend deleting the file"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "password-auth-failed-literal-template",
+      "prompt": "ansible deploys my n8n compose stack. postgres is up and healthy, i can psql in from the host with the exact password ansible wrote. but n8n crash loops with 'password authentication failed for user \"n8n\"' over and over then 'There was an error initializing DB'. i templated the password into the compose file with {{ lookup('file','/etc/secrets/pw') }}. the file exists on the server, i checked.",
+      "expected_output": "Should ask what the compose file on the host actually contains and identify that the Jinja was copied through literally, because ansible.builtin.copy with src: does not template (only template: does, and content: is templated because module args are). Should ALSO point out that even with template:, an Ansible lookup runs on the controller, so a path that exists only on the managed host can never be read. Should prescribe an env_file written on the host instead.",
+      "files": [],
+      "assertions": [
+        "Tells the user to inspect the rendered file on the host for a literal template expression",
+        "Explains copy: with src: does not render templates while template: and content: do",
+        "Explains that Ansible lookups execute on the controller, not the managed host",
+        "Recommends secrets reaching containers via an env_file generated on the host",
+        "Does not send the user to debug PostgreSQL authentication configuration"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "healthz-green-but-503",
+      "prompt": "n8n behind caddy in compose. the n8n healthcheck is green and docker says healthy, caddy started, but every request through the proxy returns 503 and the n8n logs say 'Database is not ready!'. it sorts itself out after a minute or two but it happens on every deploy and caddy 503s the whole time. is this a caddy config problem?",
+      "expected_output": "Should identify that /healthz is a liveness probe returning 200 as soon as the process listens, while /healthz/readiness is the endpoint that gates on the database, and that the compose healthcheck is using the wrong one. Because caddy uses depends_on service_healthy, it starts against an instance that cannot serve requests yet. The fix is to point the healthcheck at /healthz/readiness. Not a Caddy problem.",
+      "files": [],
+      "assertions": [
+        "Distinguishes /healthz (liveness) from /healthz/readiness (database readiness)",
+        "Identifies the compose healthcheck as the cause, not Caddy",
+        "Explains that depends_on: service_healthy therefore releases dependents too early",
+        "Prescribes changing the healthcheck to the readiness endpoint",
+        "Does not suggest adding arbitrary sleeps or retries in Caddy"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "webhook-urls-wrong-behind-proxy",
+      "prompt": "running n8n 2.36 behind cloudflare and nginx on https://automation.example.com. the editor works fine but every webhook url n8n shows me is http://localhost:5678/webhook/... so the github webhooks i registered all fail. i set WEBHOOK_URL=https://automation.example.com/ in my env, and N8N_HOST and N8N_PROTOCOL too. what else does it need?",
+      "expected_output": "Should identify that WEBHOOK_URL is deprecated as of n8n 2.35.0 in favour of N8N_WEBHOOK_URL and that on 2.36 the correct key is N8N_WEBHOOK_URL. Should also flag N8N_PROXY_HOPS: behind Cloudflare AND nginx there are two proxies and n8n's default is 0, so client addresses are mis-attributed. Should warn that already-registered webhook URLs handed to third parties are effectively permanent, so this needs fixing before more integrations are created.",
+      "files": [],
+      "assertions": [
+        "Names N8N_WEBHOOK_URL as the correct key and WEBHOOK_URL as deprecated since 2.35.0",
+        "Mentions that the deprecated key logs a startup warning rather than failing",
+        "Raises N8N_PROXY_HOPS and that two proxies means 2, not the default 0",
+        "Notes that webhook URLs given to third parties are effectively permanent",
+        "Does not recommend N8N_ENDPOINT_* variables as the fix"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "restore-credential-decryption-false-negative",
+      "prompt": "writing a disaster recovery test for our self hosted n8n. i restore the pg_dump into a scratch database, boot n8n against it with the same N8N_ENCRYPTION_KEY, and everything looks fine - i can log in, workflows are all there. but my check for credentials keeps failing: i GET /rest/credentials/{id}?includeData=true and compare data.value to what i stored, and it comes back as a totally different 54 character string. does that mean the encryption key didn't survive the restore?",
+      "expected_output": "Should reassure that this is almost certainly NOT a key failure: n8n redacts credential values in API responses, returning a fixed-length sentinel rather than plaintext, so a read-back comparison can never succeed. Should explain the honest test is to USE the credential - n8n resolves and decrypts a node's credential at execution time and fails the node if it cannot - so the drill should execute a workflow whose node carries the credential and assert the execution reaches success.",
+      "files": [],
+      "assertions": [
+        "States that n8n redacts credential values in API responses",
+        "Explains that a read-back comparison can never succeed and is a false negative",
+        "Prescribes exercising the credential in an execution as the real proof",
+        "Notes n8n fails the node if it cannot decrypt, which is what makes execution a valid test",
+        "Does not tell the user their encryption key or restore is broken"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "pg-dump-version-mismatch",
+      "prompt": "backup script for self hosted n8n on ubuntu 24.04 started failing. 'pg_dump: error: aborting because of server version mismatch / pg_dump: detail: server version: 17.5; pg_dump version: 16.15'. weird thing is my monitoring queries with psql against the same database work perfectly, always have. did something change on the server?",
+      "expected_output": "Should explain nothing changed: Ubuntu 24.04 ships postgresql-client 16 while the server is 17.5, psql is protocol-compatible across that gap so queries always worked, but pg_dump and pg_restore refuse a newer server outright. Should note this is why the mismatch surfaces only in the backup path, potentially long after deployment. Should offer the two fixes - add the PGDG repo for a matching client, or run pg_dump inside the database container which already has matching binaries - and note the container option keeps client and server married across image bumps.",
+      "files": [],
+      "assertions": [
+        "Identifies Ubuntu 24.04's postgresql-client as version 16 against a 17.x server",
+        "Explains psql is protocol-compatible so queries were never affected",
+        "Explains pg_dump/pg_restore refuse a newer server by design",
+        "Offers running pg_dump inside the database container as a fix",
+        "Notes that only the backup path touches pg_dump, so this can surface long after deploy"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "converge-green-containers-never-started",
+      "prompt": "my ansible playbook for the n8n stack finishes completely green, ok=45 changed=0, no failures. but the site is down. docker compose ps shows caddy and the task runner as 'created' - they never actually started. if i just run docker compose up -d by hand everything comes up fine. why doesn't a green playbook run mean the stack is up?",
+      "expected_output": "Should identify that the bring-up is almost certainly in a handler, which only fires when a task reports changed, so a converge that changes no file never reconciles container state. The containers were probably left created-but-not-started by an earlier run whose health dependency failed. Should explain the general principle that a handler expresses 'an input changed' not 'the world should look like this', and prescribe running the idempotent up -d as an unconditional task. Should also suggest gating end state rather than task outcomes.",
+      "files": [],
+      "assertions": [
+        "Identifies a notify/handler as the cause and changed=0 as why it did not fire",
+        "Explains handlers express input change, not desired state",
+        "Prescribes an unconditional idempotent docker compose up -d task",
+        "Notes that a green task list is not evidence the stack is running",
+        "Recommends acceptance checks on end state rather than task results"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "ansible-split-args-shell-task",
+      "prompt": "ansible refuses to even load my playbook now. 'ERROR! Error loading tasks: failed at splitting arguments, either an unbalanced jinja2 block or quotes' and it points at a shell task. the task is fine, it's a grep and an echo, i've run the exact same thing in bash. i tried escaping the quotes differently and it still won't load.",
+      "expected_output": "Should explain Ansible splits a shell task's arguments before running anything, counting brace pairs and quotes across the entire block INCLUDING comments, so the offending characters may be in a comment rather than the command. Should note the error names the task, never the character. Should recommend moving any non-trivial shell into a script file the play installs and calls, and mention ansible-playbook --syntax-check as a fast offline way to iterate rather than deploying to find out.",
+      "files": [],
+      "assertions": [
+        "Explains argument splitting happens before execution, at load time",
+        "Points out that comments inside the shell block are counted too",
+        "Warns the error names the task rather than the offending character",
+        "Recommends moving non-trivial shell into a script file",
+        "Mentions ansible-playbook --syntax-check as the offline check"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "cloudflare-token-zone-scope",
+      "prompt": "terraform can't find my cloudflare zone. 'Error: failed to find exactly one result / with data.cloudflare_zone.zone / 0 found'. i checked the token with the verify endpoint and it says 'Invalid API Token' so i assumed the token was bad, but i regenerated it twice and get the same thing. the token works for other stuff though.",
+      "expected_output": "Should explain that both responses are correct simultaneously: a zone-scoped token has no user-level scope so /user/tokens/verify refuses it while zone endpoints work fine, and that verify is therefore a misleading way to test a scoped token. Should tell the user to enumerate GET /zones to see what the token can actually reach, and that the likely cause is the token being scoped to a different zone than the one being looked up.",
+      "files": [],
+      "assertions": [
+        "Explains a zone-scoped token legitimately fails /user/tokens/verify",
+        "States both API responses can be correct at the same time",
+        "Prescribes enumerating GET /zones to discover the token's actual reach",
+        "Identifies wrong-zone scope as the likely cause of 0 found",
+        "Does not advise regenerating the token again"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "no-certificate-behind-restricted-origin",
+      "prompt": "locked down my origin firewall so only cloudflare ip ranges can reach 80 and 443 - i don't want people bypassing the proxy. terraform applied clean, caddy is running, dns record is there pointing at the server. but https just times out and caddy logs show acme retries. the deploy reported success so i assumed tls was fine. the dns record is a plain A record, not proxied, because i wanted to be able to ssh to the hostname.",
+      "expected_output": "Should identify the coupling: with the record unproxied, Let's Encrypt's HTTP-01 challenge comes directly from LE's own addresses, which the Cloudflare-only firewall drops, so no certificate is ever issued. Should note the converge succeeding is expected because nothing checks certificate issuance at apply time. The fix is to proxy the record (and reach the host by its origin address for ssh), or to widen the firewall, or to use DNS-01. Should suggest asserting certificate issuance as a gate.",
+      "files": [],
+      "assertions": [
+        "Explains the ACME HTTP-01 challenge arrives from Let's Encrypt's own addresses when unproxied",
+        "Identifies the Cloudflare-only firewall as dropping that challenge",
+        "Notes the converge succeeds because nothing gates certificate issuance",
+        "Offers proxying the record, widening the firewall, or DNS-01 as fixes",
+        "Mentions using the origin address for ssh once the record is proxied"
+      ]
+    }
+  ]
+}
