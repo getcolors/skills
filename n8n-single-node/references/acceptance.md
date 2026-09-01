@@ -128,6 +128,31 @@ against the restored pair" while the scratch database was empty: n8n migrated a
 blank database and reported ready. Assert restored *content* — the table count,
 then the rows.
 
+## Blast radius is a gate, not a note
+
+A deployment whose backups share a credential with its live data and its
+infrastructure state has no backups worth the name: the credential sitting on
+the host can erase the thing that survives the host. Measured on the build that
+produced this skill, the shared pair could list, write and **delete** in the
+OpenTofu state bucket and delete backup sets.
+
+The instructive part is the asymmetry that shipped first. The package enforced
+bucket separation with two hard validator rules — backups may not share a
+bucket with state or live data — while saying nothing at all about credentials.
+A helper that answered "is the backup credential scoped?" existed and was
+called only from tests.
+
+**Enforcing a security property on one axis while silently permitting the other
+is worse than enforcing neither**, because the visible rule implies the
+invisible one is handled too. The fix was not to forbid the shared credential —
+a first converge may predate the scoped tokens — but to make it impossible to
+reach by accident: refuse it unless desired state carries an explicit
+`shared-accepted`, so the weak posture is a committed line visible in a diff,
+and have the gate report `RISK` on every run rather than a quiet `skip`.
+
+A skip reads as "not applicable". An accepted risk is not the same thing and
+should not be spelled the same way.
+
 ## The three meta-rules
 
 **A gate that is never invoked is worse than no gate.** Inheriting a package's
