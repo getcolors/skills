@@ -423,3 +423,39 @@ Acquire conditionally in both directions — a conditional create when the lease
 is absent, a conditional replace against the exact ETag that was read when it
 is expired — and scope release to the holder, or a node whose lease expired
 while it was still restarting will delete its successor's lease on the way out.
+
+
+---
+
+## 17. A gate reporting data loss that did not happen
+
+```
+FAIL — only 0 of 100 pre-failure records survived
+```
+
+The most alarming line this deployment can print, and on the run that produced
+it nothing had been lost. Checked immediately, independently:
+
+```
+colors-failover:0:101      <- 100 "before-" records plus the one written during
+colors-failover:1..5:0        the outage, all present
+```
+
+**Means:** the gate read the victim partition **once**, right after its leader
+was killed, while the partition was still being reassigned. The fetch failed,
+stderr was suppressed, `grep -c` counted zero, and transient unavailability was
+reported as permanent loss.
+
+**Fix:** retry the survival read (keeping the highest count seen) and verify
+the pre-kill produce actually succeeded — an unverified produce makes the same
+gate claim data loss for records that were never written.
+
+**The rule:** a gate asserting a catastrophic outcome needs *more* evidence
+than one asserting success, not less. "Not readable yet" and "gone" are
+indistinguishable from a single read at the wrong moment, and only one of them
+is an emergency.
+
+Related, ruled out by experiment during the same investigation: `kcat -p N`
+does correctly target partition N on produce. A probe record sent with `-p 4`
+landed in partition 4 and not in 0, so a producer ignoring the flag was not the
+explanation.
