@@ -47,6 +47,19 @@
         "Consulted the clipboard bridge even though the user never said the word 'clipboard'",
         "Describes the screenshot before speculating about what the user is stuck on"
       ]
+    },
+    {
+      "id": 3,
+      "name": "washed-colors-knowledge-only",
+      "prompt": "that image you grabbed from my clipboard earlier - i put it on the website and the rendered colors are washed out, all pale, but the original looks fine everywhere else. why?",
+      "expected_output": "Diagnoses the PNG gAMA chunk before blaming the site's CSS: explains that an inverted gamma value (e.g. 219998 instead of 45455) makes browsers lift midtones while Read/sharp/most viewers ignore the chunk, and proposes a lossless re-encode that strips the chunk, verified by comparing decoded pixels before and after. (Knowledge-only eval: the harness fixture is not a bad-gAMA PNG, so this grades the diagnosis, not a live fix.)",
+      "files": [],
+      "assertions": [
+        "Reply suspects the image file's color metadata (the PNG gAMA chunk) rather than starting from the site's CSS",
+        "Reply explains why the wash is invisible to the agent (Read/sharp/most viewers ignore gAMA while browsers honor it)",
+        "Reply proposes a lossless re-encode to strip the chunk and verifying decoded pixels are unchanged",
+        "Reply does not claim the clipboard bridge injected the chunk"
+      ]
     }
   ]
 }

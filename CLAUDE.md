@@ -12,12 +12,12 @@ build into a Context Skill; `submit-package-skill` and
 `submit-context-skill` govern catalog admission. **Context Skills**
 (`agent-network-single-node`, `agent-network-kubernetes`,
 `agent-network-doks`, `posthog-single-node`, `rybbit-single-node`,
-`neon-single-node`)
+`neon-single-node`, `automq-vultr`)
 carry knowledge distilled from a verified build — symptom-routed traps,
 contracts, and acceptance doctrine. The normative definition, the five
 required artifacts, and the no-second-copy rule live in
 `workspace/standards/context-skill.md`; `agent-network-single-node` is the
-reference implementation, and all three conform — the posthog and rybbit
+reference implementation, and all of them conform — the posthog and rybbit
 skills migrated their `assets/` out on 2026-08-27 (rybbit's one verified
 improvement, the UDP 443 HTTP/3 publication, was upstreamed to
 `getcolors/rybbit` first). Neither kind is a

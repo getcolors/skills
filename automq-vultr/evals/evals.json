@@ -1,0 +1,47 @@
+{
+  "skill_name": "automq-vultr",
+  "evals": [
+    {
+      "id": 0,
+      "name": "quorum-never-elects-ping-works",
+      "prompt": "three-node automq cluster on vultr, kraft combined roles. every broker comes up and then dies about a minute later with 'Received a fatal error while waiting for the controller to acknowledge that we are caught up'. before that the log just repeats 'the loader is still catching up because we still don't know the high water mark yet' forever. i checked and all three nodes ARE listening on 9093, the controller.quorum.voters string matches the actual private ips, and i can ping every node from every other node. raft log shows each one going Candidate -> election timed out -> Candidate again, epoch is up past 50. what am i missing?",
+      "expected_behaviour": "Identifies that ping proves nothing about TCP and that there are two firewalls on a Vultr node: the provider group AND ufw, which the Ubuntu image ships enabled with only 22/tcp. Directs the user to test raw TCP across the private network with a listener rather than ping, and to check ufw status on the host first. Notes the broker-side fatal error is a downstream symptom, not the cause."
+    },
+    {
+      "id": 1,
+      "name": "scram-invalid-credentials-every-principal",
+      "prompt": "my automq/kafka cluster suddenly refuses every SASL login - 'Authentication failed during authentication due to invalid credentials with SASL mechanism SCRAM-SHA-512'. it's not just one user, it's the admin principal and the inter-broker one too, and i haven't changed any passwords. the secrets file is identical on all three nodes, i checked the sha256. i tried kafka-configs --bootstrap-controller to re-add the user and got UnsupportedEndpointTypeException. how do i get back in?",
+      "expected_behaviour": "Recognises this as a cluster formatted WITHOUT SCRAM bootstrap records, and has the user confirm it by counting USER_SCRAM_CREDENTIAL_RECORD in bootstrap.checkpoint via kafka-dump-log --cluster-metadata-decoder. Explains there is no in-place recovery and why the controller-endpoint route is closed. Gives the recovery: wipe the metadata directories, clear the format/genesis records, re-converge as a true genesis. Identifies the root cause as deciding genesis from a marker claimed before the format rather than from evidence the format completed."
+    },
+    {
+      "id": 2,
+      "name": "jaas-entry-missing-crashloop",
+      "prompt": "kafka won't start at all, restarts in a loop. the only fatal line is \"Could not find a 'KafkaServer' or 'external.KafkaServer' entry in the JAAS configuration. System property 'java.security.auth.login.config' is not set\". i don't want to use a jaas FILE, i'm configuring everything with listener-scoped properties, and my controller and internal listeners both have their sasl.jaas.config set and the controller endpoint even logs that it's READY. what file is it looking for?",
+      "expected_behaviour": "Explains that no file is missing - the public SASL_SSL/SCRAM listener needs its own listener.name.<name>.scram-sha-512.sasl.jaas.config, which carries no username or password because a SCRAM server validates against the metadata log. Notes that the controller listener reporting READY is evidence the other listeners are configured correctly, and that this one is easy to omit precisely because it looks empty."
+    },
+    {
+      "id": 3,
+      "name": "gate-passes-once-then-fails",
+      "prompt": "our deployment's smoke test produces 500 records to a topic, consumes 500 back and diffs them. it passed perfectly the first time we deployed. now every single converge fails with 'produced 500 records, consumed a different set' even though the cluster is completely healthy - brokers registered, quorum has a leader, everything. did something corrupt the topic?",
+      "expected_behaviour": "Identifies that nothing is wrong with the cluster: the topic persists across converges so the consumer reads the previous run's records. Explains that idempotency applies to acceptance gates too, and that a gate which only passes on a fresh cluster is a first-run demonstration. Recommends recreating the gate's topic (waiting out asynchronous deletion) or tagging records with a per-run value, and suggests auditing other gates for the same flaw."
+    },
+    {
+      "id": 4,
+      "name": "vpc2-not-found",
+      "prompt": "terraform apply against vultr fails with: Error: error creating VPC 2.0: {\"error\":\"Not found.\",\"status\":404} on the vultr_vpc2 resource. my api key definitely works, it created the instances and the firewall group in the same apply. the resource is right there in the provider docs. is this a permissions thing on my account?",
+      "expected_behaviour": "Explains it is neither permissions nor a provider bug: Vultr retired the VPC 2.0 API while the provider still ships the resource and its docs. Has the user prove it with two curl calls (/v2/vpc2 returns 404, /v2/vpcs returns 200) and switch to vultr_vpc with v4_subnet/v4_subnet_mask and vpc_ids on the instance, noting internal_ip is still the private address. Draws the general lesson that provider source proves things about the client, not the endpoint."
+    },
+    {
+      "id": 5,
+      "name": "rf1-looks-wrong",
+      "prompt": "inherited an automq deployment and i think whoever set it up made a serious mistake - every topic including __consumer_offsets is replication factor 1, on a three node cluster. i want to bump everything to RF=3 before we put real traffic on it. any reason not to just do that?",
+      "expected_behaviour": "Explains RF=1 is the architecture, not an error: durability comes from object storage since a produce is acknowledged once the record is in the bucket, and upstream ships RF=1 defaults for the same reason. Warns that raising it adds cost and write amplification without adding durability. Distinguishes durability from availability - a partition whose leader dies is unwritable until reassignment and __consumer_offsets is RF=1 too - and recommends measuring those windows with a targeted failover test rather than changing the replication factor."
+    },
+    {
+      "id": 6,
+      "name": "cert-renewal-race-design",
+      "prompt": "designing tls for a 3 broker kafka cluster where each broker advertises its own hostname. plan was to have every node run lego with dns-01 for its own name plus the shared bootstrap name, on a systemd timer. that seems simplest - no distribution step. anything wrong with it?",
+      "expected_behaviour": "Flags that all three nodes issuing for the shared bootstrap name will race on the same _acme-challenge TXT record, each deleting the others' proof, and that this appears at renewal time months after the converge that created it. Also flags that it puts a zone-editing DNS credential on every publicly reachable broker. Recommends a single issuer publishing to shared storage the others pull from, and warns that restarts must be serialised by a distributed lease rather than each node's local quorum check, since combined broker+controller nodes restarting together destroy the majority."
+    }
+  ]
+}

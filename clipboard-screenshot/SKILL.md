@@ -70,6 +70,24 @@ Read the image rather than working from the user's description of it. They may s
 produced it, the working directory, and the line number — details they did not
 think to mention and that make the difference.
 
+## The colors you see may not be the colors that ship
+
+A grabbed image can look perfect when you Read it and still render washed out
+on a web page — navy turning slate, saturated green turning pale. The culprit
+seen in the wild is a PNG `gAMA` chunk carrying an inverted gamma: 219998
+(γ 2.2) where a sane file stores 45455 (γ 1/2.2). Browsers honor the chunk and
+lift every midtone; Read, sharp, and most image viewers ignore it, so the wash
+is invisible to you. The chunk arrives in the clipboard bytes themselves — from
+whatever exported the artwork, not from the bridge.
+
+So when the user says a republished grab looks washed while "the original"
+looks fine, don't hunt through the page's CSS first: list the PNG's chunks and
+check `gAMA`. The fix is a lossless re-encode (a sharp `.png()` round-trip
+strips the chunk); prove it changed metadata only by comparing decoded raw
+pixels before and after. Seen once (2026-08-31); the exporting pipeline that
+wrote the chunk was never identified, so treat any grabbed PNG destined for the
+web as suspect, not just one source.
+
 ## When the grab fails
 
 The script separates the failure modes because they call for different responses:
