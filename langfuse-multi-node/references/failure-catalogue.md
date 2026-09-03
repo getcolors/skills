@@ -1,8 +1,8 @@
 # Failure catalogue
 
 Symptom-indexed, verbatim where the error was verbatim. Every entry was hit
-on the live build at the pins in `pins.md` — nine converges and two
-rehearsals against six Vultr machines on 2026-09-03 — unless it says
+on the live build at the pins in `pins.md` — twelve converges and three
+rehearsal runs against six Vultr machines on 2026-09-03 — unless it says
 otherwise.
 
 ## Prisma `P3005` on Langfuse's first boot — the storage tier put a table there
@@ -181,3 +181,13 @@ to resume.
 
 Cosmetic, but it lands in gate output and reads like a fault. Set
 `RCLONE_CONFIG=/dev/null` when every remote comes from the environment.
+
+## `describe` says UNHEALTHY: "container langfuse-web restarted 13 times" — forty minutes after its last restart
+
+Docker's `RestartCount` is cumulative for the container's life. A container
+that looped during an early converge and has been healthy since — and was
+never recreated, which is the idempotence working — carries that number
+forever, and a monitor that thresholds the raw count accuses a healthy
+host. Pair the count with `.State.StartedAt`: five or more restarts **and**
+a start within the last thirty minutes means restarting now; the count
+alone means history.

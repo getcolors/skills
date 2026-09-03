@@ -35,13 +35,14 @@ with verbatim text in `references/failure-catalogue.md`:
   deployment's state" immediately after a successful create
 - Ansible: `Destination directory /etc/colors does not exist`; `failed at
   splitting arguments` on a valid shell block; a Redis probe that "answered
-  nothing"
+  nothing"; a monitor calling a healthy container UNHEALTHY because Docker's
+  `RestartCount` never forgets
 
 Langfuse's own guidance is a single Docker Compose host for testing or
 Kubernetes for production. This skill covers the shape in between — the
 components Langfuse says should be separate, each on its own machine, with
 the data tiers reachable only from the peer that needs them — measured on a
-live build: eleven converges against six Vultr instances, a four-round
+live build: twelve converges against six Vultr instances, a four-round
 adversarial plan review, three rehearsal runs, and the restore-and-boot,
 replica-loss and Redis-restart drills on the live hosts, all on 2026-09-03.
 
