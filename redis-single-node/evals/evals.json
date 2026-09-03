@@ -1,0 +1,61 @@
+{
+  "skill_name": "redis-single-node",
+  "evals": [
+    {
+      "id": 0,
+      "name": "restored-rdb-loads-nothing",
+      "prompt": "testing our redis backups before we need them. i pulled last night's dump.rdb from s3, started a fresh redis:7.2 container with the same config as prod (appendonly yes) and the dump mounted at /data/dump.rdb, it comes up fine, redis-cli PING says PONG, but DBSIZE is 0. the file is 40MB so it's definitely not empty. logs just say 'Creating AOF base file appendonly.aof.1.base.rdb on server start' and 'Ready to accept connections'. is the dump corrupt? redis-check-rdb says it looks OK.",
+      "expected_output": "Should explain that a Redis 7 started with appendonly yes loads only the AOF manifest; with no appendonlydir/ beside dump.rdb it creates an empty AOF base and never reads the RDB, which is exactly what that log line says. The dump is not corrupt. For a restore check, start the scratch instance with --appendonly no (and --save \"\" to keep it read-only); for a real recovery, stop Redis, place dump.rdb, remove appendonlydir/, then start with AOF on so Redis rewrites the AOF base from the loaded RDB. Should recommend making the check part of a rehearsal that reads a known key back rather than trusting PONG.",
+      "files": [],
+      "assertions": [
+        "Identifies appendonly yes with no appendonlydir/ as the reason dump.rdb was ignored",
+        "States that the 'Creating AOF base file ... on server start' log line means an empty AOF was created, not that the RDB was loaded",
+        "Prescribes --appendonly no for the restore check",
+        "Describes the live-recovery path as placing dump.rdb, removing appendonlydir/, and starting with AOF on so the base is rewritten from the RDB",
+        "Does NOT tell the user the dump is corrupt"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "gate-passes-on-noauth",
+      "prompt": "our deploy pipeline has a smoke step: `docker compose exec -T redis redis-cli PING && echo redis ok`. it's been green for weeks. today someone noticed the app can't connect - 'NOAUTH Authentication required'. turns out requirepass was added to redis.conf two weeks ago and the app's env never got the password. how did the smoke step not catch two weeks of redis refusing everything?",
+      "expected_output": "Should explain that redis-cli prints error replies (NOAUTH, WRONGPASS) on stdout and exits 0 in non-interactive mode, so `&&` treats a refusal as success. The gate must capture the reply and grep it: PONG for success, and a negative gate that expects NOAUTH/WRONGPASS and fails on PONG. Should suggest passing the password via REDISCLI_AUTH (docker compose exec -e) rather than -a on the command line, warn against reading the reply with head -c (it blocks on the short NOAUTH reply), and recommend capturing into a variable before grepping under pipefail.",
+      "files": [],
+      "assertions": [
+        "States that redis-cli exits 0 on error replies such as NOAUTH and WRONGPASS",
+        "Prescribes grepping the reply text (PONG / NOAUTH / WRONGPASS) instead of relying on the exit status",
+        "Recommends an explicit negative gate that fails when an unauthenticated PING answers PONG",
+        "Mentions REDISCLI_AUTH or another way to avoid the password on the command line",
+        "Warns about head -c blocking on the short reply or about SIGPIPE under pipefail"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "ufw-says-closed-but-port-answers",
+      "prompt": "single ubuntu 24.04 vps running redis in docker compose with `ports: - 6379:6379`. ufw is enabled and `ufw status` shows only 22/tcp ALLOW. but shodan just emailed me that my redis is exposed and i can indeed connect from my laptop to the public ip on 6379. how is ufw not blocking this? do i need to add a deny rule?",
+      "expected_output": "Should explain that Docker inserts its own iptables DOCKER chain ahead of ufw's rules, so published container ports bypass ufw entirely; a ufw deny rule will not fix it. The fix is the bind list in the Compose ports: publish on 127.0.0.1:6379:6379 (and a private/VPC address if peers need it), plus the provider firewall. Should tell the user to verify with the kernel (ss -ltn, expecting only loopback and the private address) and with a connect attempt from outside, not with ufw status. Should also recommend requirepass and treating the exposure window as a compromise (rotate the password, check for foreign keys / CONFIG SET dir tricks).",
+      "files": [],
+      "assertions": [
+        "Explains that Docker-published ports bypass ufw via the DOCKER iptables chain",
+        "Prescribes binding the published port to 127.0.0.1 (and optionally a private address) in the Compose ports list",
+        "Recommends verifying with ss -ltn and an external connect attempt rather than ufw status",
+        "Does NOT present a ufw deny rule as the fix",
+        "Advises rotating the password / treating the exposure as a possible compromise"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "backup-without-stopping-redis",
+      "prompt": "need nightly backups of a self-hosted redis (docker, AOF on) to cloudflare r2 without downtime. my current cron does `docker cp redis:/data/dump.rdb` then `rclone rcat` it up, but sometimes the file is mid-write and last week rclone started failing every upload with 'AccessDenied: Access Denied status code: 403' even though the token has write permission and reads work. what's the right way to do this?",
+      "expected_output": "Should recommend streaming a consistent snapshot from the server with `redis-cli --rdb -` (a replica-style full sync: point-in-time fork, no reads from the data volume, independent of the live AOF), verifying it with redis-check-rdb inside the image, and uploading with a completion protocol: dump + manifest (sha256, bytes, DBSIZE) + a .complete marker written last after a size/hash read-back, so partial sets never count. Should attribute the 403 to old rclone (Ubuntu 24.04's 1.60) doing a bucket check/create the scoped token denies, fixed with no_check_bucket (and no_head), and explain that rcat streams unknown-size uploads R2 rejects, so copyto a known-size file. Should mention that a backup is only a backup once a restore of it was rehearsed (scratch with --appendonly no).",
+      "files": [],
+      "assertions": [
+        "Recommends redis-cli --rdb - (replication-protocol snapshot) instead of copying dump.rdb from the volume",
+        "Recommends verifying the snapshot with redis-check-rdb before uploading",
+        "Describes a completion marker written last after verifying the uploaded bytes",
+        "Attributes the rclone 403 to the pre-upload bucket check and prescribes no_check_bucket (and copyto instead of rcat)",
+        "Mentions rehearsing a restore, with the scratch instance run with AOF off"
+      ]
+    }
+  ]
+}
