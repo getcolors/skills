@@ -1,0 +1,112 @@
+{
+  "skill_name": "clickhouse-replicated",
+  "evals": [
+    {
+      "id": 0,
+      "name": "sax-parse-invalid-token-address-families",
+      "prompt": "three clickhouse 26.3 nodes on vultr, all three refuse to start after i rolled out a templated /etc/clickhouse-server/config.d/cluster.xml. systemctl status says 'Main process exited, code=exited, status=232/ADDRESS_FAMILIES'. /var/log/clickhouse-server/clickhouse-server.err.log is completely empty. journalctl has a line 'Failed to merge config with .../config.d/cluster.xml: SAXParseException: Invalid token in ... line 62 column 48'. line 62 is inside a comment block where i explain the keeper setup, there's no real xml on that line. is this an ipv6 / listen_host problem?",
+      "expected_output": "Should say it is not an address-family or listen_host problem: XML forbids '--' inside a comment, so a double dash in the explanatory comment makes the file malformed at exactly that line and column; the whole config.d fragment fails to merge and the server dies before logging is configured, which is why err.log is empty and only journalctl carries the Poco exception, and the ADDRESS_FAMILIES status is noise. Should prescribe rewriting the comment and validating every rendered XML file offline (python xml.dom.minidom or xmllint) before it reaches a host.",
+      "files": [],
+      "assertions": [
+        "Identifies a double dash inside an XML comment as the invalid token",
+        "States that the status=232/ADDRESS_FAMILIES exit and the empty err.log are misleading, and that journalctl is where the message is",
+        "Does NOT send the user to listen_host, IPv6 or firewall settings",
+        "Recommends an offline XML well-formedness check on rendered config files"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "engine-override-protocol-failure",
+      "prompt": "added TTLs to the system log tables on my clickhouse replicas with a config.d file containing <query_log><engine>ENGINE = MergeTree PARTITION BY toYYYYMM(event_date) ORDER BY event_time TTL event_date + INTERVAL 30 DAY DELETE</engine></query_log> (copied from the langfuse scaling docs). now ansible says 'the service did not take the steps required by its unit configuration' and systemctl shows 'Failed with result protocol'. the err.log is just a stack trace. the peers also show all ports closed from the other nodes so i'm wondering if the firewall broke at the same time?",
+      "expected_output": "Should direct the user to clickhouse-server.log (not err.log or systemctl) for the real message, Code: 36 'If engine is specified for system table, PARTITION BY parameters should be specified directly inside engine and partition_by setting doesn't make sense', and explain that the packaged config.xml already sets partition_by for query_log/part_log/error_log so an engine override merges beside it and is refused. Should explain the 'protocol' result is what systemd reports for a Type=notify unit that exits before notifying. Should prescribe the <ttl>event_date + INTERVAL 30 DAY DELETE</ttl> setting instead, keep query_log if the application reads it, and remove unread log tables with remove=\"1\". Should say the closed ports are a consequence of the server being down, not a firewall change.",
+      "files": [],
+      "assertions": [
+        "Directs the user to clickhouse-server.log for the Code: 36 BAD_ARGUMENTS message",
+        "Explains the conflict between the packaged partition_by and the override's engine clause",
+        "Explains 'Failed with result protocol' as the Type=notify unit never notifying",
+        "Prescribes the ttl setting instead of an engine override",
+        "States the closed peer ports are because nothing is listening, not a firewall fault"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "backup-random-objects-s3-disk",
+      "prompt": "nightly clickhouse backups to cloudflare r2 via a storage_configuration disk and BACKUP DATABASE default TO Disk('backups', '20260903T065949Z/'). the query returns BACKUP_CREATED and system.backups says 270 files, but my verifier script fails with 'no objects under 20260903T065949Z/' and when i list the bucket there are ~130 objects named like agp/jjppeptxopeoqjzmlhpvtwrwopqkb. i need to be able to restore this on a rebuilt node. is r2 renaming my keys?",
+      "expected_output": "Should explain that a <type>s3</type> disk stores objects under random keys and keeps the path mapping in local metadata under /var/lib/clickhouse/disks/<name>/, so the set is only readable from that node and never appears under the stamp prefix; R2 is not renaming anything. Prescribe <type>s3_plain</type> for the backup disk (path-preserving, listable, restorable from anywhere), and for switching an existing disk: stop the server, remove the old local metadata directory, purge the stray objects, start, and confirm the disk in system.disks. Should recommend verifying a set by equality with system.backups (num_files and total_size for the backup id) plus the .backup file, and writing the completion marker last.",
+      "files": [],
+      "assertions": [
+        "Explains the random keys come from the s3 disk type keeping the path mapping in local metadata",
+        "Prescribes the s3_plain disk type for BACKUP TO Disk destinations",
+        "States that R2 is not at fault",
+        "Mentions removing the old local disk metadata directory and the stray objects when switching the type",
+        "Recommends verifying the set against system.backups num_files/total_size rather than existence alone"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "restore-beside-live-database-keeper-paths",
+      "prompt": "i want to test-restore last night's set into a second database on the SAME three-node cluster (RESTORE DATABASE default AS restore_check FROM Disk('backups', ...)) so i can boot a copy of the app against it. my worry: the tables are ReplicatedMergeTree and my default_replica_path is /clickhouse/tables/{uuid}/{shard}. a reviewer told me the database name isn't in that path so the restored tables will fight the live ones in keeper. do i need a scratch clickhouse with its own keeper? also the app copy answers 500 on every read once it's up.",
+      "expected_output": "Should say the reviewer is right that the database name is not in the path but wrong about the consequence: RESTORE assigns new UUIDs to the restored tables and the path is a function of {uuid}, so the restored replicas register under fresh Keeper paths. Should give the proof query on system.replicas (count of restore_check replicas whose zookeeper_path is among default's must be 0) and say to run it on every restore, DROP DATABASE ... SYNC before the next run, and keep a scratch server with its own Keeper only as the fallback for a path template without {uuid}. Should diagnose the 500s as the application user having grants on default.* only and prescribe GRANT SELECT ON restore_check.* for it.",
+      "files": [],
+      "assertions": [
+        "Explains that {uuid} in default_replica_path plus RESTORE's new UUIDs gives fresh Keeper paths",
+        "Provides the system.replicas collision check and says to run it on every restore",
+        "Says a scratch ClickHouse with its own Keeper is only a fallback, not required here",
+        "Attributes the application's 500s to missing SELECT grants on restore_check.* and prescribes the grant",
+        "Mentions dropping the scratch database with SYNC before the next run"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "cluster-never-forms-on-vultr",
+      "prompt": "three fresh vultr instances (ubuntu 24.04) in a VPC, clickhouse installed natively with an embedded keeper on each. every node can ping the other two on the VPC addresses. but SELECT count() FROM clusterAllReplicas('default', system.one) only ever returns 1, system.zookeeper says no quorum / session expired, and nothing in the logs mentions a firewall. i set up a vultr firewall group for port 22 only because the VPC is private anyway. what am i missing?",
+      "expected_output": "Should explain two firewalls are filtering the VPC interface: the Vultr firewall group filters the private interface too and passes ICMP while dropping TCP (so ping proves nothing), and the Vultr Ubuntu image ships ufw enabled with only 22/tcp; ClickHouse runs natively so nothing bypasses ufw. Prescribe /32 allows from each replica's actual VPC address on 9000, 9009, 9181 and 9234 in both layers, 8123 and 9000 from the application host only, and gates: raw TCP (not ping) for the allows, an authenticated remote() query between nodes, and a deliberate denial (the app host on 9181) so the firewall is proven right rather than merely open. May note the OpenTofu count-over-static-lengths pattern for rules keyed on addresses unknown at plan time.",
+      "files": [],
+      "assertions": [
+        "Identifies the Vultr firewall group as filtering the private interface with ICMP passing and TCP dropped",
+        "Identifies ufw as shipped enabled with only 22/tcp on the image",
+        "Lists the four replica-to-replica ports (9000, 9009, 9181, 9234) as /32 rules per peer in both layers",
+        "Prescribes raw TCP gates rather than ping and a denial gate alongside the allows"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "app-user-grants-vs-gate-grants",
+      "prompt": "my application user in clickhouse has exactly the grants the langfuse docs list (SELECT/INSERT on default.*, the ALTERs, system.parts columns, system.query_log*, READ ON REMOTE, CLUSTER ON *.*) and the app migrates fine ON CLUSTER. but my own health check running as that user fails: 'Code: 497. DB::Exception: langfuse: Not enough privileges. To execute this query, it's necessary to have the grant SHOW COLUMNS ON system.one. (ACCESS_DENIED)' for clusterAllReplicas('default', system.one), and a second one about SELECT ON system.clusters. are the docs wrong? also i'm defining the user in users.d xml, can grants even go there?",
+      "expected_output": "Should say the documented list is exact and sufficient for the application (the ON CLUSTER migrations prove it) and simply does not include what an operator's checks need: add GRANT SELECT ON system.one, system.clusters and system.zookeeper (and SELECT on any rehearsal/restore database) and label them as the package's grants, not the application's. Should confirm grants can be declared in XML on a users.d user with <grants><query>GRANT ...</query></grants>, applied on restart, alongside password_sha256_hex and networks.",
+      "files": [],
+      "assertions": [
+        "States the documented grant list is correct for the application and not wrong",
+        "Prescribes the additional SELECT grants on system.one, system.clusters and system.zookeeper for the operator's checks",
+        "Confirms the XML <grants><query> form on a users.d user",
+        "Distinguishes application grants from package/operator gate grants"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "query-log-missing-after-start",
+      "prompt": "gate in my converge checks that system.query_log exists on each replica right after clickhouse-server starts (the app reads system.query_log* on boot). it fails on fresh nodes: SELECT count() FROM system.tables WHERE database='system' AND name='query_log' returns 0, even though query_log is configured in config.xml with a ttl. second converge it passes. is my ttl config disabling the table?",
+      "expected_output": "Should explain that system.query_log is created lazily on the first flush, so a freshly started server has no such table yet; the ttl setting is not disabling it. Prescribe running SYSTEM FLUSH LOGS before checking, then counting the table in system.tables, and note that the same flush should precede any check that greps the query log (for example for a leaked backup credential).",
+      "files": [],
+      "assertions": [
+        "Explains the lazy creation of system.query_log on first flush",
+        "Prescribes SYSTEM FLUSH LOGS before the existence check",
+        "States the ttl setting is not the cause",
+        "Mentions flushing before any query-log inspection such as a credential grep"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "replica-loss-drill",
+      "prompt": "want to prove my 3-replica clickhouse cluster actually survives losing a node before i trust it. plan: stop clickhouse on one node during ingestion, then start it again. how do i know it caught up, and what should the automation do if the probe fails halfway? the app connects to node 0 only.",
+      "expected_output": "Should describe the drill as run: stop clickhouse-server on a non-zero replica (node 1), ingest and read through the application while it is down, start it, and wait until SELECT count() FROM system.replication_queue on that node reaches 0 with retries. Should insist the stop and the start live in an Ansible block/always (or equivalent) so a failed probe cannot leave the replica stopped. Should warn that because the application points at node 0 with no client-side failover, stopping node 0 takes the application down and was not part of the drill, and that this is a stated single point of failure for the app tier while the data survives on three replicas.",
+      "files": [],
+      "assertions": [
+        "Prescribes stopping a replica other than the one the application points at",
+        "Uses system.replication_queue draining to 0 as the catch-up evidence",
+        "Requires the restart to run in an always/finally path so a failed probe cannot leave the node down",
+        "Warns that node 0 is the application's single point of failure and a node-0 loss was not drilled"
+      ]
+    }
+  ]
+}
