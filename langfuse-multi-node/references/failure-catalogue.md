@@ -191,3 +191,11 @@ forever, and a monitor that thresholds the raw count accuses a healthy
 host. Pair the count with `.State.StartedAt`: five or more restarts **and**
 a start within the last thirty minutes means restarting now; the count
 alone means history.
+
+## `comm: file 2 is not in sorted order` on the media manifest comparison
+
+Two listings sorted with `sort -k2` (by object name) and then compared with
+`comm`, which collates whole lines: the first run that had a previous
+manifest to compare against failed, live, one converge after the
+reinspection had predicted it. Sort both inputs the same way `comm` does
+(`LC_ALL=C sort`, whole line) before `comm`.
