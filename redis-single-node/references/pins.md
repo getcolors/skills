@@ -48,6 +48,10 @@ documented on 2.40.3.
 
 ### Retest conditions
 
+- Any host image change: confirm whether unattended-upgrades still runs
+  minutes after first boot and restarts sshd; the connection retries stay
+  either way, but the catalogue entry's timing claim is image-specific.
+
 - Any `redis-image` bump: re-run the negative probe (AOF on, no
   `appendonlydir/`, expect 0 keys) — if a future major loads `dump.rdb` in
   that state, the scratch doctrine is merely redundant, but the catalogue

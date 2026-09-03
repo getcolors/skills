@@ -82,6 +82,33 @@ and a bounded connect from the internet to `<public-ip>:6379`
 round-trip succeeded. Publish on `127.0.0.1:` and the private address, and
 gate on the kernel's listener list — never on `ufw status`.
 
+## `UNREACHABLE` on a host booted minutes ago *(this build)*
+
+```
+[ERROR]: Task failed: Failed to connect to the host via ssh: kex_exchange_identification: read: Connection reset by peer
+Connection reset by 78.141.212.44 port 22
+fatal: [redis-vultr]: UNREACHABLE! => {"changed": false, "msg": "…", "unreachable": true}
+PLAY RECAP: redis-vultr : ok=0 changed=0 unreachable=1 failed=0
+```
+and on the host:
+```
+sshd[10188]: Received signal 15; terminating.
+sshd[10685]: Server listening on 0.0.0.0 port 22.
+```
+with `/var/log/apt/history.log` showing `Commandline: /usr/bin/unattended-upgrade`
+entries for libpam-* and libssl3t64 at that minute, and
+`unattended-upgrades.log` ending `All upgrades installed` two minutes later.
+
+Ubuntu 24.04's `apt-daily-upgrade.timer` ran six minutes after the host's
+first boot and the libpam/libssl upgrades restarted sshd; the play's one
+connection attempt landed in that second. The host was reachable a minute
+later with nothing wrong. Fix: `[ssh_connection] retries = 3` in
+`ansible.cfg` and `wait_for_connection` ahead of every play, not only the
+converge. (A `/etc/ssh/ssh_config line 53: Unsupported option
+"gssapiauthentication"` line printed alongside is workstation noise from a
+nix-built ssh reading the distro config; it appears on every successful
+connection too.)
+
 ## `docker inspect` RestartCount never goes down *(langfuse-multi-node)*
 
 `RestartCount` is cumulative for the life of a container. A monitor

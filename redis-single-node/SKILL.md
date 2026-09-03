@@ -1,6 +1,6 @@
 ---
 name: redis-single-node
-description: What a single-node Redis 7 deployment needs beyond the docs, verified live - a restored dump.rdb that loads ZERO keys because the instance started with appendonly yes and no appendonlydir/ beside it ("Creating AOF base file appendonly.aof.1.base.rdb on server start"), redis-cli refusals ("NOAUTH Authentication required.", "WRONGPASS invalid username-password pair") that exit 0 so a gate keyed on exit codes passes on a refusal, a `head -c` read of that reply that hangs until the timeout, Docker-published ports that bypass ufw (only the bind list and the provider firewall bound exposure), backups that stream `redis-cli --rdb -` instead of copying dump.rdb from the volume, and R2 backup sets that count only once a .complete marker reads back. Use whenever the user self-hosts Redis on one machine with Docker Compose, backs it up to S3-compatible storage, asks whether the AOF or the RDB is what restores, gates a converge on redis-cli output, or hits any symptom above. Full symptom index in the body.
+description: What a single-node Redis 7 deployment needs beyond the docs, verified live - a restored dump.rdb that loads ZERO keys because the instance started with appendonly yes and no appendonlydir/ beside it ("Creating AOF base file appendonly.aof.1.base.rdb on server start"), redis-cli refusals ("NOAUTH Authentication required.", "WRONGPASS invalid username-password pair") that exit 0 so a gate keyed on exit codes passes on a refusal, a six-minute-old host reported UNREACHABLE (kex_exchange_identification - Connection reset by peer) because unattended-upgrades restarted sshd, Docker-published ports that bypass ufw (only the bind list and the provider firewall bound exposure), backups streamed with `redis-cli --rdb -`, and R2 backup sets that count only once a .complete marker reads back. Use whenever the user self-hosts Redis on one machine with Docker Compose, backs it up to S3-compatible storage, asks whether the AOF or the RDB is what restores, gates a converge on redis-cli output, or hits any symptom above. Full symptom index in the body.
 ---
 
 # Single-node Redis
@@ -18,6 +18,9 @@ with verbatim text in `references/failure-catalogue.md`:
   and reports nothing, or blocks until its timeout kills it
 - `ufw status` lists only 22 while a Docker-published Redis port answers
   from the network anyway
+- a play on a host booted minutes ago fails `UNREACHABLE` with
+  `kex_exchange_identification: read: Connection reset by peer` — and the
+  host is fine a minute later
 - a `docker inspect` `RestartCount` that never goes down, so a monitor
   flags a healthy container forever
 - rclone against R2: `AccessDenied` on writes a bucket-scoped token should
@@ -37,7 +40,8 @@ a backup set, and that a restore restores. That distance was measured on a
 live build — the `redis-vultr` deployment on 2026-09-03: two converges
 (the first through the pinned launcher passed on its first run; the second
 was the idempotence proof), one recovery rehearsal, one deliberate negative
-probe of the AOF/RDB loading rule, and an authorized delete.
+probe of the AOF/RDB loading rule, and two authorized deletes — the first
+failed on a trap the catalogue now carries, the second removed everything.
 
 Everything here was verified against that running deployment unless it
 says otherwise. Entries carried from sibling builds name the build that
@@ -167,6 +171,19 @@ the host loses everything since the newest **completed** set — the backup
 interval, six hours here — and the monitor fails when the newest completed
 set is older than `redis-backup-max-age-hours`. A monitor that measured the
 newest *object* instead would be fooled by a half-uploaded set.
+
+## A fresh Ubuntu 24.04 host upgrades itself minutes after boot
+
+`apt-daily-upgrade.timer` fired six minutes after first boot on this
+build, and `unattended-upgrade` upgraded sixty packages over the next
+three minutes. Two of them — libpam and libssl — restart sshd, and the
+delete's cleanup play opened its first connection inside that second:
+`kex_exchange_identification: read: Connection reset by peer`, host
+`UNREACHABLE`, play failed, destroy never ran (correctly leaving the key
+and the config block). The earlier converges and the rehearsal had merely
+missed the window. Every play now runs with `[ssh_connection] retries =
+3` and a `wait_for_connection` first; a single-attempt connection on a
+young host is a coin toss.
 
 ## Colors-specific notes
 
