@@ -1,0 +1,100 @@
+{
+  "skill_name": "langfuse-multi-node",
+  "evals": [
+    {
+      "id": 0,
+      "name": "prisma-p3005-on-neon",
+      "prompt": "self-hosting langfuse v4 with postgres on a separate box (it's a self-hosted neon, storage/compute thing). langfuse-web just restart loops: 'Error: P3005 The database schema is not empty. Read more about how to baseline an existing production database'. the db is brand new, nothing ever ran against it except the storage tier's own health check. the two 'common causes' it prints are about connectivity and url encoding and both are fine, psql connects with the same DATABASE_URL. how do i baseline a db that was never used?",
+      "expected_output": "Should explain that Prisma refuses to migrate a non-empty schema that has no _prisma_migrations table, and that the 'never used' database is not empty: the Neon storage tier's own smoke gate creates a table (colors_smoke) inside the application database on every converge. The fix is to drop that table exactly once before Langfuse's first boot (guarded on to_regclass('public._prisma_migrations') being null); after the first migration the table can come back and Prisma ignores it. Should say the two printed causes are red herrings.",
+      "files": [],
+      "assertions": [
+        "Identifies the storage tier's smoke table (colors_smoke) inside the application database as what makes the schema non-empty",
+        "Explains P3005 fires only when _prisma_migrations is absent, so it is a first-boot-only condition",
+        "Prescribes dropping the smoke table before the first boot, guarded on the migrations table not existing",
+        "States that the printed hints (unreachable database, URL encoding) are not the cause",
+        "Does NOT recommend prisma migrate resolve / manual baselining of 436 migrations"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "traces-never-appear-events-only",
+      "prompt": "fresh langfuse v4 self-hosted, everything healthy, health endpoints 200. i post a batch to /api/public/ingestion and get 207, the raw event even shows up in my S3 bucket, but the trace never appears and GET /api/public/traces/<id> is 404 forever. the web log has a line about 'Rejected 2 event(s) from the legacy /api/public/ingestion endpoint ... events_only mode'. is my clickhouse broken? the traces table is empty.",
+      "expected_output": "Should explain that a fresh v4 deployment runs in the events_only write mode: the legacy batch endpoint answers 207 while rejecting every event type except score-create/sdk-log, the legacy read routes (/traces/:id and friends) are 404 for everyone, and the data model is events_full/events_core, so an empty traces table is expected, not broken. Should prescribe OTLP/HTTP ingestion at /api/public/otel/v1/traces with the x-langfuse-ingestion-version: 4 header and reading back through GET /api/public/v2/observations?traceId=..., and mention that the S3 object appears because Langfuse writes the payload before deciding.",
+      "files": [],
+      "assertions": [
+        "Names the events_only write mode as the reason and says ClickHouse is not broken",
+        "States the legacy read routes return 404 in this mode (so 404 is not a missing trace)",
+        "Prescribes OTLP ingestion at /api/public/otel/v1/traces with the x-langfuse-ingestion-version: 4 header",
+        "Prescribes GET /api/public/v2/observations with a traceId filter for reading back",
+        "Explains the raw event in S3 landing despite the rejection"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "clickhouse-wont-start-after-ttl-config",
+      "prompt": "added a config.d file to my clickhouse 26.3 nodes to put TTLs on system.query_log like the langfuse scaling docs show (an <engine>ENGINE = MergeTree ... TTL ...</engine> block). now clickhouse-server won't start on any node. systemctl says 'Failed with result protocol' and the err.log is basically just a stack trace. what did i break?",
+      "expected_output": "Should point the user at clickhouse-server.log (not err.log or systemctl) for the real message — Code: 36 'If engine is specified for system table, PARTITION BY parameters should be specified directly inside engine and partition_by setting doesn't make sense' — and explain the packaged config.xml already carries partition_by for those tables, so an engine override merges beside it and is refused. Prescribe the <ttl>event_date + INTERVAL 30 DAY DELETE</ttl> setting instead, keep query_log (v4 reads system.query_log*), and mention which six log tables can be removed.",
+      "files": [],
+      "assertions": [
+        "Directs the user to clickhouse-server.log for the Code: 36 BAD_ARGUMENTS message",
+        "Explains the conflict between the base config's partition_by and the override's engine clause",
+        "Prescribes the ttl setting instead of an engine override",
+        "Warns to keep query_log because Langfuse v4 reads system.query_log*",
+        "Does NOT suggest editing the packaged config.xml in place"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "clickhouse-backup-random-objects",
+      "prompt": "set up nightly clickhouse backups to cloudflare r2 with an s3 disk and BACKUP DATABASE default TO Disk('backups', '2026.../'). the query returns BACKUP_CREATED, system.backups says 270 files, but in the bucket there's nothing under the date prefix, just ~130 objects with names like agp/jjppeptxopeoqjzmlhpvtwrwopqkb. is r2 mangling my keys? how would i ever restore this on another machine?",
+      "expected_output": "Should explain that a type=s3 disk stores objects under random keys and keeps the path mapping in local metadata under /var/lib/clickhouse/disks/<name>/, so the backup is only readable from that node; R2 is not mangling anything. Prescribe <type>s3_plain</type> for the backup disk (path-preserving, listable, restorable from anywhere), and note that switching an existing disk's type requires stopping the server and removing the old local metadata directory, plus cleaning the stray objects.",
+      "files": [],
+      "assertions": [
+        "Explains the random keys come from the s3 disk type keeping path mapping in local metadata",
+        "Prescribes the s3_plain disk type for BACKUP TO Disk destinations",
+        "States that R2 is not at fault",
+        "Mentions removing the old local disk metadata when switching the type",
+        "Notes the stray random objects should be cleaned up"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "clickhouse-comment-double-dash",
+      "prompt": "three clickhouse nodes, all fail to start after i templated a cluster config. journalctl shows 'Failed to merge config with .../colors-cluster.xml: SAXParseException: Invalid token in ... line 62 column 48' and systemd says status=232/ADDRESS_FAMILIES. line 62 is inside a comment block where i explain the setup, there's no xml there at all. the err.log is empty.",
+      "expected_output": "Should identify that XML forbids '--' inside comments, so a comment containing a double dash makes the file malformed at exactly that point; the ADDRESS_FAMILIES status and the empty err.log are noise because the server dies before logging is configured. Should suggest validating rendered XML offline with python's xml.dom.minidom (or xmllint) as a gate.",
+      "files": [],
+      "assertions": [
+        "Identifies a double dash inside an XML comment as the invalid token",
+        "Dismisses the systemd ADDRESS_FAMILIES status and the empty err.log as misleading",
+        "Recommends an offline XML well-formedness check on rendered config files",
+        "Explains that only journalctl carries the Poco exception at this stage"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "media-upload-201",
+      "prompt": "my acceptance script for a self-hosted langfuse fails at the media step: it POSTs /api/public/media and I treat anything but 200 as failure. it 'answered 201' with an uploadUrl and a mediaId in the body. the browser also doesn't render images in traces. what's the right sequence for an SDK-style media upload, and do i need to configure anything on the R2 bucket?",
+      "expected_output": "Should say the flow is working: POST returns 201 with mediaId/uploadUrl, then PUT the bytes to the presigned URL with Content-Type and x-amz-checksum-sha256, PATCH /api/public/media/{id} with uploadedAt/uploadHttpStatus, and GET returns a download url — no CORS needed for a non-browser client. Rendering in the browser needs a CORS rule on the bucket for the Langfuse origin, which requires an Admin R2 token (Object Read & Write tokens cannot set bucket CORS), so it is an operator step in the dashboard or wrangler.",
+      "files": [],
+      "assertions": [
+        "States that 201 is the expected create status and the flow is correct",
+        "Lists the PUT (with x-amz-checksum-sha256) and PATCH steps and the GET download url",
+        "Explains that browser rendering needs a CORS rule on the bucket",
+        "Notes that scoped R2 tokens cannot set bucket CORS; an admin token / dashboard / wrangler is required"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "ssh-key-not-in-state-after-create",
+      "prompt": "colors package on vultr in keygen mode. the first create worked and made all my instances plus the account ssh key. the second create dies immediately with 'vultr already has an SSH key named <profile> ... that is not in this deployment's state and matches ~/.ssh/<profile>.pub: a previous delete left it behind'. no delete ever ran. tofu output shows the key id in params. why does it think it doesn't own it?",
+      "expected_output": "Should explain that ONCE's create matrix reads :ssh_key_id with the underscore from the map the package's state function returns, so a package that renames its tofu outputs to kebab-case hides the key it owns and trips the never-adopt rule against itself. Fix: return the keywordized params untouched (only normalize the host list separately). Should tell the user not to delete the key at the provider.",
+      "files": [],
+      "assertions": [
+        "Identifies the key-name mismatch (:ssh_key_id vs :ssh-key-id) in the state map as the cause",
+        "States the key IS owned and must not be deleted at the provider",
+        "Prescribes returning the raw keywordized params to the create matrix",
+        "Mentions the never-adopt rule is working as designed on wrong input"
+      ]
+    }
+  ]
+}
