@@ -67,7 +67,9 @@ In the order recovery actually happens, across four hosts:
 1. Fresh sets: ClickHouse first (node 0), then Postgres and media (Neon
    host) — so a Postgres dump exists that completed *after* the ClickHouse
    set. A ClickHouse set counts only when the bucket listing equals what
-   `system.backups` reports for its id (`num_files`, `total_size`); a media
+   `system.backups` reports for its id — `num_entries` + 1 (the `.backup`
+   metadata file) objects and `compressed_size` bytes; `num_files` and
+   `total_size` are the LOGICAL counts and do not match the disk; a media
    run records every archived object's MD5 and refuses to complete if any
    object the previous run archived is missing or changed — that is the
    only check that covers objects deleted from the live prefix since.

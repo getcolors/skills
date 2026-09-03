@@ -199,3 +199,12 @@ Two listings sorted with `sort -k2` (by object name) and then compared with
 manifest to compare against failed, live, one converge after the
 reinspection had predicted it. Sort both inputs the same way `comm` does
 (`LC_ALL=C sort`, whole line) before `comm`.
+
+## `clickhouse-backup: bucket holds 179 objects, ClickHouse wrote 459`
+
+`system.backups.num_files` counts LOGICAL files and `total_size` the logical
+bytes. What an `s3_plain` disk actually holds is `num_entries` stored
+entries plus the `.backup` metadata file, and `compressed_size` bytes
+(483496 on the live build, exactly the bucket's total before the manifest
+and marker were added). A set-integrity check against the first pair
+fails every healthy backup.
