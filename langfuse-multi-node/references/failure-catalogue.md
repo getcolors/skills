@@ -1,7 +1,7 @@
 # Failure catalogue
 
 Symptom-indexed, verbatim where the error was verbatim. Every entry was hit
-on the live build at the pins in `pins.md` — twelve converges and three
+on the live build at the pins in `pins.md` — fifteen converges and six
 rehearsal runs against six Vultr machines on 2026-09-03 — unless it says
 otherwise.
 

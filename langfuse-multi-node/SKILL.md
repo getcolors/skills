@@ -42,8 +42,8 @@ Langfuse's own guidance is a single Docker Compose host for testing or
 Kubernetes for production. This skill covers the shape in between — the
 components Langfuse says should be separate, each on its own machine, with
 the data tiers reachable only from the peer that needs them — measured on a
-live build: twelve converges against six Vultr instances, a four-round
-adversarial plan review, three rehearsal runs, and the restore-and-boot,
+live build: fifteen converges against six Vultr instances, a four-round
+adversarial plan review, two post-build inspection rounds, six rehearsal runs, and the restore-and-boot,
 replica-loss and Redis-restart drills on the live hosts, all on 2026-09-03.
 
 Everything here was verified against that running deployment unless it
