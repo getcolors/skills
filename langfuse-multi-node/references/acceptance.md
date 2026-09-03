@@ -66,7 +66,11 @@ In the order recovery actually happens, across four hosts:
 
 1. Fresh sets: ClickHouse first (node 0), then Postgres and media (Neon
    host) — so a Postgres dump exists that completed *after* the ClickHouse
-   set.
+   set. A ClickHouse set counts only when the bucket listing equals what
+   `system.backups` reports for its id (`num_files`, `total_size`); a media
+   run records every archived object's MD5 and refuses to complete if any
+   object the previous run archived is missing or changed — that is the
+   only check that covers objects deleted from the live prefix since.
 2. `clickhouse-restore-check --pair`: the newest completed ClickHouse set
    that has a later Postgres dump; `RESTORE DATABASE default AS
    restore_check FROM Disk('backups', …)`; the restored replicated tables
@@ -76,6 +80,8 @@ In the order recovery actually happens, across four hosts:
    `CREATE DATABASE … OWNER langfuse`, `pg_restore` **as** `langfuse` from
    inside the compute container (Ubuntu's client is 16, compute is 17),
    every public table owned by the role.
+   Any `pg_restore: error:` line fails the restore except `must be owner of
+   extension` (the dump's `COMMENT ON EXTENSION plpgsql`).
 4. `langfuse-rehearsal`: a second Compose project on loopback 3100 with the
    pinned web image, `DATABASE_URL` → the scratch database, `CLICKHOUSE_DB=
    restore_check`, `REDIS_KEY_PREFIX=restore:`, both auto-migrations off,
@@ -83,12 +89,15 @@ In the order recovery actually happens, across four hosts:
    Proven through the API: the live project keys authenticate (hashed keys +
    salt + Postgres), the smoke trace's root and generation read back
    (ClickHouse restore usable through the app), the seeded LLM connection
-   returns its display secret (the row decrypts).
+   returns its display secret (the row decrypts), and the smoke score is in
+   `restore_check.scores`, read with the application user.
 5. Drop both scratch databases.
 6. **Replica loss**: stop ClickHouse on node 1, ingest and read back with it
-   down, start it, `system.replication_queue` drains to 0.
+   down, start it, `system.replication_queue` drains to 0 — the start is an
+   Ansible `always`, so a failed probe cannot leave the replica down.
 7. **Redis restart with a job queued**: stop the worker, enqueue a trace,
-   restart Redis, start the worker, the trace becomes readable.
+   restart Redis, start the worker (also in `always`), the trace becomes
+   readable.
 8. `<prefix>.colors-recovery-verified` with the two set stamps — a marker
    distinct from `.colors-ready`, because "the service answers" and "the
    service can be recovered" are different claims.
