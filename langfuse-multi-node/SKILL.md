@@ -57,8 +57,10 @@ The working files live in the
 — the OpenTofu for the VPC and the four role-scoped firewall groups, the
 seven Ansible plays, the ClickHouse cluster configuration, the backup and
 restore scripts, the smoke and the rehearsal — under
-`src/resources/io/github/getcolors/langfuse/tools/`, covered by that repo's
-tests, goldens and launcher checks, and consumed by the
+`green/src/resources/io/github/getcolors/langfuse/tools/`, copied byte for
+byte into `red/resources` and blue's embedded `resources/` (the package ships
+green, red and blue; `scripts/parity.sh` diffs the three renders), covered by
+that repo's tests, goldens and launcher checks, and consumed by the
 [`langfuse-vultr`](https://github.com/getcolors/langfuse-vultr) deployment.
 The Neon storage tier is `getcolors/neon` rendered from a SHA pin, and its
 own traps are the [`neon-single-node`] Context Skill's. This skill carries no

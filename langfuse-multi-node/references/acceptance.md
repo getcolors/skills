@@ -2,7 +2,10 @@
 
 Exit codes are not evidence; each gate asks the system what it actually
 has. All of these ran against the live six-machine deployment; the
-rehearsal ran there too and is repeatable with `./green rehearse`.
+rehearsal ran there too and is repeatable with `./green rehearse` (or
+`./red` and `./blue`, which render the same tree byte for byte). After the
+red and blue ports landed, each colour ran one more idempotent converge
+against the same deployment and passed every gate below.
 
 ## Server-side gates (every converge, from the app host)
 

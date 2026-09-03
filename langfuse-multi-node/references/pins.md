@@ -16,7 +16,7 @@ rehearsal and the two drills. **Verified 2026-09-03.**
 | Neon storage image | `ghcr.io/neondatabase/neon:release-9129@sha256:166022a72bf9983eba96d061d794f4740edbd4c3301e66202c1180acce9a323c` |
 | Neon compute image (Postgres 17) | `ghcr.io/neondatabase/compute-node-v17:release-compute-9073@sha256:ed6a613231d7026b4df8b00563444b9f33745370a3b3f0a2183e723f460ba974` |
 | `getcolors/neon` templates | `87c009549a928fdf1f9dc135f9740c3baa5782d7` |
-| `getcolors/langfuse` (companion, final pin) | `e7a18678d3b7a5be23cd6f701927794514e7efe6` |
+| `getcolors/langfuse` (companion, final pin) | `c18f2540b609672159aa7e31ca3ab89a132a48a4` — the tri-colour port (green, red, blue), stamped into all three launchers by `f233680`; the green-only build this skill was distilled from was `e7a18678d3b7a5be23cd6f701927794514e7efe6` |
 | Plans | Neon `vc2-4c-8gb`, Redis `vc2-1c-2gb`, ClickHouse ×3 `vc2-4c-8gb`, app `vc2-4c-8gb` |
 | host packages | Ubuntu 24.04 apt: `docker.io`, `docker-compose-v2`, `postgresql-client` (16), `rclone` (1.60.1), `ufw`, `jq`, `openssl`, `python3` |
 
