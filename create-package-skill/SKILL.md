@@ -20,7 +20,7 @@ Your first response must ask for:
 
 After receiving both values, treat `<skill>/` and `<skill>-<suffix>/` as the exact target folders. Do not infer or choose either value yourself.
 
-Then discuss the intended behavior, requirements, naming, scope, acceptance criteria, deployment target, credentials, and authorization.
+Then discuss the intended behavior, requirements, naming, scope, acceptance criteria, deployment target, the compute provider (and whether a second one is advertised from birth — see `workspace/standards/compute-provider.md`), credentials, and authorization.
 
 During this phase:
 
@@ -78,7 +78,8 @@ You must:
    - never export COLORS_PAR_PROFILE;
    - use working-tree overrides while developing across repository boundaries;
    - use real pushed Git SHAs for final pins—never invent or hand-edit SHAs;
-   - keep installed launcher copies synchronized with Package Skill payloads.
+   - keep installed launcher copies synchronized with Package Skill payloads;
+   - be born conforming to the workspace standards in `workspace/standards/`: `ssh-keypair.md` (the profile-named machine keypair, keygen by default), `ssh-config.md` (the `~/.ssh/config` block), `compute-name.md` (machines named after the profile, no required name key), and `compute-provider.md` (a package-owned registry of advertised compute providers — one entry is enough — with the template under `tools/infrastructure/<provider>/`, the `params` contract that records the provider, the rebuild-only switch rule, and one fixture and golden per advertised provider per keypair mode). Read each before scaffolding; a new package never adopts them later.
 4. Run all repository-specific tests, golden tests, launcher tests, build checks, and safe dry runs.
 5. Inspect golden diffs rather than accepting them blindly.
 6. Diagnose failures, revise the implementation, and repeat checks until they pass.
