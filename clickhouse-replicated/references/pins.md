@@ -58,9 +58,10 @@ changing it.
 metadata; `type=s3_plain` writes every file at its path. The backup disk
 lives on node 0 only, with `<backups><allowed_disk>` restricting statements
 to it, so no `BACKUP ... TO S3(url, key, secret)` form is ever used and the
-thirty-day `query_log` holds no credential. Verified by the set-equality
-check (bucket listing = `system.backups` `num_files`/`total_size`) and by
-the host-side grep of the flushed query log.
+thirty-day `query_log` holds no credential. The original notes claimed direct listing equality with logical counters;
+the September 10 AWS counterexample at this same version supersedes that
+claim. Use the corrected logical/physical protocol in acceptance.md. The
+host-side credential grep remains separate evidence.
 
 ### Vultr sizing and image
 
@@ -93,3 +94,48 @@ not assumed); `SELECT timezone()` answered `UTC` without configuration.
 - **rclone newer than ~1.64**: the `no_check_bucket` / `no_head` / no-`rcat`
   rules the set scripts inherit from the `neon-single-node` build may
   lapse; retest before dropping them.
+
+## AWS assessment pins — September 10, 2026
+
+Published-pin convergence, runtime rehearsal, full deletion and repeated
+deletion passed. The deployment was removed and independently audited.
+They do not replace the verified Vultr set above. See [AWS evidence](aws.md).
+
+| Component | AWS assessment pin |
+|---|---|
+| Compute runtime | `getcolors/colors-compute` `b98d88b0afe482b7033c5760db6d6ae4a43eec11` |
+| ClickHouse | `26.3.29.7`, same exact server/client/common-static version |
+| EC2 | three `t3.xlarge` ClickHouse nodes; one `t3.medium` Metabase node |
+| Image | Ubuntu 24.04 amd64 `ami-025d99823a4caad37`, image name `ubuntu-noble-24.04-amd64-server-20260904` |
+| Region/AZ | `us-east-1` / `us-east-1a`; 60 GiB encrypted root disks |
+| S3 | managed state and backup buckets; native endpoint `https://s3.us-east-1.amazonaws.com`; backup disk `s3_plain` |
+| DNS | Cloudflare zone `bigconfig.online`, five DNS-only VPN A records under `clickhouse-aws.bigconfig.online` |
+
+Successful published create 4 used ClickHouse source
+`18ea94a3abd1dd8445eac1ea4e52bfcacd6ce321`, launcher publication `298b502`. Its explicit S3 encryption settings passed
+the live no-change plan (exit 0); published launcher build/create dry-run/
+delete dry-run passed in an isolated credential-free directory. Complete
+pinned create 4 passed with exit 0, including acceptance/rehearsal and final
+no-change drift (`evidence/live-create-4.txt`). Earlier source `990e3d17fe92f3b31b95ef66097175ca6c6853cb`
+(launcher `eb55ef9`) passed runtime acceptance/rehearsal in create 3 but
+failed the final S3 encryption drift gate.
+Recheck private peer rendering and AWS role ingress on compute changes;
+repeat bucket isolation, object equality and full deletion on storage/backend
+changes. Existing ClickHouse retest conditions above still apply.
+
+### AWS public WireGuard path: tested MTU
+
+Explicit `MTU = 1420` on the local client and all four server WireGuard
+interfaces passed the focused large-response client initialization probe on
+September 10. Automatic values of 8920/8921 failed this path. Re-test a large
+ClickHouse client initialization response after an image, endpoint route or
+WireGuard template change; the working value is scoped to this deployment's
+public EC2 tunnel path. [Measured failure and source explanation](aws.md#small-queries-pass-dbt-hangs-wireguard-mtu-from-a-jumbo-interface).
+
+The current deployment launcher pins source
+`b3ebf393442d0a2e0d3bf5e2967cc1f59bab6d31`, published by launcher commit
+`daeeb28f54475df68c87318ce86c7aa3d10c776a`. This adds the delete-only route to
+backend finalization when compute inventory is missing; create behavior is
+unchanged. Full and repeated deletion passed at that pin, including missing
+inventory routing to an already-absent managed backend. Final independent
+resource and local SSH/WireGuard cleanup audits passed.

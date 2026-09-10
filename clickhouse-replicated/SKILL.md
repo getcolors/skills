@@ -1,6 +1,6 @@
 ---
 name: clickhouse-replicated
-description: What a three-node replicated ClickHouse cluster with embedded Keeper needs that the docs will not tell you - clickhouse-server failing to start with 'SAXParseException Invalid token', status=232/ADDRESS_FAMILIES and an empty err.log; 'PARTITION BY parameters should be specified directly inside engine' and 'Failed with result protocol' after a config.d override on system.query_log; BACKUP TO Disk answering BACKUP_CREATED while the bucket holds only randomly named objects (s3 versus s3_plain); a test restore beside the live database that must not collide in Keeper; 'Not enough privileges ... SHOW COLUMNS ON system.one' with the documented grants; replicas that ping each other while clusterAllReplicas never reaches 3 on Vultr (provider firewall and ufw both filter the VPC); system.query_log absent until SYSTEM FLUSH LOGS. Use whenever the user runs ClickHouse replicas with Keeper on separate hosts, backs ClickHouse up to S3 storage, or test-restores on a live cluster. Full symptom index at the top of the body.
+description: "Replicated ClickHouse with embedded Keeper: SAXParseException Invalid token, status=232/ADDRESS_FAMILIES and empty err.log; PARTITION BY engine conflicts and systemd protocol failure; BACKUP_CREATED with random S3 keys or logical/physical count mismatches; live restore Keeper collisions; missing system.one grants or lazy query_log; peers ping while clusterAllReplicas never reaches 3. AWS additions cover small queries working while dbt/clickhouse_connect hangs with ReadTimeoutError or StreamFailureError over jumbo-MTU WireGuard, Ansible YAML errors at unexpanded scaffold conditionals, stale outage probes, replica-count gates broken by rehearsal tables, and managed S3 backend cleanup after compute retirement. Use for three-host Keeper clusters, native S3 backups, and restore rehearsals. Full symptom routing and dated evidence are in the body."
 ---
 
 # Replicated ClickHouse with embedded Keeper on three hosts
@@ -35,6 +35,23 @@ with verbatim text in `references/failure-catalogue.md`:
 - `system.query_log` does not exist on a freshly started server
 - a converge of several machines dies with no error of its own at exactly ten
   minutes
+- `BACKUP_CREATED` on `s3_plain`, but 30 S3 objects/9107 bytes disagree with
+  `num_files=33`/`total_size=3875`: distinguish logical metadata from physical
+  deduplicated entries before diagnosing a partial upload.
+- AWS small HTTP queries pass but `clickhouse_connect.get_client()` hangs
+  reading `system.settings`, then reports `ReadTimeoutError` or
+  `StreamFailureError`: inspect WireGuard MTU and the [AWS evidence](references/aws.md).
+- `ON CLUSTER clickhouse-aws` fails with `Code: 62` at the hyphen: quote
+  the configured cluster name in SQL, even when XML accepts that name.
+- AWS runtime acceptance passes but final storage drift shows
+  `blocked_encryption_types = ["SSE-C"]` changing to `[]`; see the
+  [AWS default/readback finding](references/aws.md#s3-encryption-defaults-produce-drift-after-successful-runtime-acceptance).
+- AWS Ansible reports `YAML parsing failed` at `[% if clickhouse-backup-bucket %]`
+- AWS peers still point at the ancestor's `10.20.1.11` addresses; an outage
+  drill passes without inserting a new row; a repeated converge sees nine
+  replicas where the gate expected six; deletion retires compute but leaves
+  the managed state bucket. See [AWS findings](references/aws.md), which
+  distinguishes observed failures from review findings and completed live gates.
 
 This skill covers one shard of three replicas on three machines, each
 running its own Keeper voter inside `clickhouse-server`, reachable only over
@@ -47,13 +64,31 @@ after the post-build inspection's fixes), a four-round adversarial plan review
 and a two-round post-build inspection, and the replica-loss drill on the live
 hosts.
 
-Everything here was verified against that running cluster unless it says
-otherwise. Where this skill contradicts the ClickHouse or Langfuse docs, the
-live probe is the authority, and the entry says which. The application-side
+Entries label their evidence: dated live observations, review findings,
+source-derived explanations, and explicitly unmeasured limits. Live results establish the
+behavior measured at their stated pins and scope; they do not establish
+unmeasured behavior. The September 10 backup counterexample explicitly
+corrects an earlier doctrine claim. The application-side
 consequences of the same build — the Langfuse v4 write mode, the Prisma trap,
 the restore-and-boot through the app — are the
 [`langfuse-multi-node`](https://www.getcolors.ai/getcolors/skills/langfuse-multi-node)
 Context Skill's; this skill does not repeat them, only links to them.
+
+## AWS evidence has its own scope
+
+The September 10, 2026 AWS assessment uses the standalone
+[`getcolors/clickhouse`](https://github.com/getcolors/clickhouse) package,
+[`getcolors/colors-compute`](https://github.com/getcolors/colors-compute), and
+[`getcolors/clickhouse-aws`](https://github.com/getcolors/clickhouse-aws) deployment.
+Read [references/aws.md](references/aws.md) for its managed S3 lifecycle,
+Cloudflare/WireGuard topology, observed parser failure and review findings.
+**Published-pin create 4, backup/restore, replica recovery, full deletion and
+repeat deletion passed. Independent final audits found zero remaining
+deployment resources and confirmed local SSH/WireGuard cleanup.** The focused live rehearsal proved native backup accounting,
+analytics restore, fresh-write replica recovery, private Keeper denial and all
+three monitors. Independent backup IAM isolation passed. The Vultr claims
+below retain their original September 3 provenance; [AWS evidence](references/aws.md)
+names the newer measured failures and limits.
 
 ## The reference implementation, and why this skill ships no assets
 
@@ -178,23 +213,25 @@ host** for the secret rather than passing the secret into a query.
   under random keys and keeps the path mapping in local metadata under
   `/var/lib/clickhouse/disks/<name>/`: the first backup returned
   `BACKUP_CREATED` with 270 files and left 128 randomly named objects that
-  only that node could ever read back. `s3_plain` writes every file at its
-  own path — the set is listable (`.backup`, `data/`, `metadata/`) and
-  restorable from anywhere. Switching a live node between the two types
+  depended on the original local path metadata for read-back. Preserving or
+  recovering that metadata can preserve access; listing the bucket alone
+  cannot reconstruct it. `s3_plain` was chosen for path-preserving objects
+  (`.backup`, `data/`, `metadata/`) and restore portability independent of
+  that original disk metadata. Switching a live node between the two types
   means stopping the server, removing the old local metadata directory and
   purging the stray objects; the companion's notes record exactly that
   one-off on node 0.
-- **A set counts only when the bucket equals `system.backups`.** `BACKUP ...
-  SETTINGS async = 0 FORMAT TSV` returns the backup id and status; the
-  script reads `num_files` and `total_size` for that id from
-  `system.backups` and requires the recursive listing under `<stamp>/` to
-  match both, plus ClickHouse's own `.backup` metadata file (written last).
-  The post-build inspection asked for an incoming-to-final copy with
-  per-object checksums; that was rejected as doubling the S3 traffic of every
-  nightly set, and the equality check was accepted as the evidence that adds
-  something. Only then the manifest, and the `.complete` marker **last**,
-  written with read-back — restore picks completed sets only, and a 0-byte
-  marker satisfies an existence check forever.
+- **Logical files and S3 objects are different counts.** The original Vultr
+  notes claimed direct bucket equality with `num_files`/`total_size`. The
+  September 10 AWS run disproved that as a portable gate at the same
+  ClickHouse version: deduplication aliases logical files and `.backup`
+  adds physical bytes. Compare logical `.backup` entries to those counters;
+  compare the resolved physical path/size map, including `.backup`, to the
+  S3 listing and physical counters. See the [corrected set protocol](references/acceptance.md#the-backup-set-protocol-clickhouse-backup-node-0)
+  and [measured counterexample](references/aws.md#logical-backup-files-are-not-physical-s3-objects).
+  The old equality claim remains historical evidence under review, not an
+  acceptance rule. Only after both checks write the manifest and the
+  nonempty `.complete` marker **last**, with read-back.
 - **Timers**: the set nightly on node 0 only, the monitor every fifteen
   minutes on every node, and the monitor's backup-age check runs only where
   the backup credential file exists.

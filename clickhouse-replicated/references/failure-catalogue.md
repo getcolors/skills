@@ -116,21 +116,22 @@ prefix held **128 objects with random names** (`agp/jjppeptxopeoqjzmlhpvtwrwopqk
 …) and nothing under `<stamp>/`. R2 was not mangling keys: a disk of
 `<type>s3</type>` stores objects under random keys and keeps the path
 mapping in local metadata under `/var/lib/clickhouse/disks/<name>/`, so the
-set is readable only from that node, and never by a listing. A backup
-destination must be `<type>s3_plain</type>`, which writes every file at its
-own path (`.backup`, `data/…`, `metadata/…`) and is listable and restorable
-from anywhere.
+set depends on the original local path metadata for reading; preserving or
+recovering that metadata can recover access. Bucket listing alone does not
+provide the mapping. This implementation chose `<type>s3_plain</type>` to
+write files at their paths (`.backup`, `data/…`, `metadata/…`) and support
+restore without the original disk metadata.
 
 Switching an existing disk's type on a live node: stop the server, remove
 the old local metadata directory (`/var/lib/clickhouse/disks/backups/` here),
 purge the stray objects, start. The disk registers again under the new type
 (`SELECT count() FROM system.disks WHERE name = 'backups'` = 1 is the gate).
 
-Verify a set by equality, not existence: the recursive listing under
-`<stamp>/` must equal `num_files` and `total_size` from `system.backups` for
-the backup id the statement returned (`SETTINGS async = 0 FORMAT TSV`
-returns `id<TAB>status`), and `.backup` — which ClickHouse writes last — must
-be present. Only then write the manifest and, last, the `.complete` marker.
+Verify metadata and physical objects separately, not existence alone. The
+original direct comparison of S3 listing to `num_files`/`total_size` is
+**superseded**: deduplicated logical files and native `.backup` bytes make
+those quantities different. Use the [corrected acceptance protocol](acceptance.md#the-backup-set-protocol-clickhouse-backup-node-0),
+then write the manifest and completion marker last.
 
 ## `RESTORE DATABASE default AS restore_check`: will the replicated tables collide in Keeper?
 
@@ -211,3 +212,114 @@ kill leaves no ClickHouse or Ansible error — the run simply stops. Run
 converges detached (`setsid nohup ... &`) and watch the log; a killed
 Ansible run resumes idempotently, and the exact-version apt step is a no-op
 the second time.
+
+## AWS: YAML parsing fails at `[% if clickhouse-backup-bucket %]`
+
+Observed on September 10, 2026 in create 1, before ClickHouse startup:
+
+```text
+[ERROR]: YAML parsing failed: While scanning for the next token found character that cannot start any token.
+Origin: .../clickhouse-ansible/clickhouse.yml:158:2
+158 [% if clickhouse-backup-bucket %]
+     ^ column 2
+```
+
+The package scaffold uses `<% ... %>` conditionals; `[% ... %]` was copied
+into a source template and survived rendering literally. Ansible therefore
+could not parse the playbook. This is earlier than ClickHouse config parsing;
+changing XML, Keeper ports or systemd cannot fix it. Use the package's actual
+scaffold delimiters and syntax-check the **rendered backup-enabled AWS
+playbook**, since an older fixture without backup options missed this branch.
+The corrected source and new AWS fixture passed create 2 ClickHouse
+configuration; complete acceptance remained blocked later by the MTU issue below. Verbatim artifact: `getcolors/clickhouse-aws/evidence/rendered-yaml-failure.txt`.
+
+## AWS review findings: stale outage results, nine replicas, unfinished backend cleanup
+
+These were found in code review, not reproduced as live failures. Full context
+and implementation ownership are in [aws.md](aws.md):
+
+- Fixed outage ID plus `INSERT ... WHERE NOT EXISTS` can pass using yesterday's
+  row; use a fresh ID and check it on surviving and recovered replicas.
+- An unscoped gate expecting six `system.replicas` rows sees nine after a
+  replicated rehearsal table is created. Scope the gate to `analytics`.
+- Retired compute can coexist with an undeleted managed backend. The delete
+  graph must still route to backend finalization on retry; stop backup writers
+  before destroying application storage, and finalize state only after all
+  owned resource states are empty.
+- Hardcoded Hetzner `10.20.1.11` peers do not describe AWS-assigned addresses.
+  Render actual joined inventory into distributed-query and Keeper settings.
+
+## AWS: tiny HTTP query works; dbt client hangs with `ReadTimeoutError` / `StreamFailureError`
+
+Observed during create 2 after the ClickHouse configuration gates passed:
+
+```text
+ReadTimeoutError
+StreamFailureError('Stream failed during read (connection closed by server)')
+SELECT name,value,readonly FROM system.settings LIMIT 10000
+```
+
+A tiny `SELECT version()` using urllib and the same dbt identity succeeded.
+The Python client's initialization fetched a larger settings response and
+hung. WireGuard's automatic MTU was 8920 locally and 8921 on each EC2 server;
+1372-byte ping payloads passed but 2000-byte payloads were lost. Setting all
+five owned WireGuard interfaces to 1420 made the identical client initialize
+and answer `SELECT 1` in under one second. The old blocked dbt process was
+then intentionally terminated with exit 143, not reported as a passed converge.
+
+The package fix is explicit MTU in both client and server interface templates.
+See [the AWS source explanation and evidence](aws.md#small-queries-pass-dbt-hangs-wireguard-mtu-from-a-jumbo-interface)
+for `wg-quick`'s route-derived MTU and AWS's internet-path limit. Validate a
+response large enough to reproduce client initialization; ping or `/ping`
+alone cannot prove this fixed. Published-pin create 4 and subsequent full/repeated deletion passed.
+
+## `s3_plain` has 30 objects/9107 bytes; `num_files=33`, `total_size=3875`
+
+Observed September 10, 2026, with `BACKUP DATABASE analytics, DATABASE default`
+at ClickHouse 26.3.29.7. The query returned `BACKUP_CREATED`; the inherited
+verifier rejected the actual tuple `(30, 33, 9107, 3875)` (physical count,
+logical count, physical bytes, logical bytes). `system.backups` also reported
+`num_entries=29`, `uncompressed_size=9107`, `compressed_size=9107`.
+
+The native `.backup` was 5254 bytes and described 33 logical files totaling
+3875 bytes. Four aliases pointed at two already-stored shared files: the
+29 unique payload objects totaled 3853 bytes. Adding `.backup` gives exactly
+30 objects and 9107 bytes. This was a verifier error, not missing S3 data;
+changing away from `s3_plain` would not fix it. Full metadata provenance and
+the correction are in [AWS evidence](aws.md#logical-backup-files-are-not-physical-s3-objects).
+
+## `ON CLUSTER clickhouse-aws`: `Code: 62`, error at position 75 (`-`)
+
+Observed in the first focused AWS rehearsal: the probe-table creation task
+failed. The operator's direct-client reproduction identified `Code: 62` and
+position 75 at the hyphen in unquoted `ON CLUSTER clickhouse-aws`. The public
+`evidence/live-rehearsal-1.txt` deliberately censors the authenticated command;
+it records task failure, not the separate direct-client diagnostic.
+
+Quote the configured cluster name in SQL and escape the chosen quoting form.
+An accepted XML cluster name is not necessarily a valid bare SQL token.
+The corrected statement passed in runtime rehearsal 3. This is a SQL parsing
+failure, not a Keeper quorum or permission error.
+
+## AWS final drift: `blocked_encryption_types = ["SSE-C"]` becomes `[]`
+
+Observed after application acceptance and rehearsal passed in published-pin
+create 3 (`evidence/live-create-3.txt`):
+
+```text
+- blocked_encryption_types = [
+    - "SSE-C",
+  ] -> null
+- bucket_key_enabled = false -> null
++ blocked_encryption_types = []
+OpenTofu drift remains in clickhouse-storage
+```
+
+The backup encryption template omitted both settings; AWS/provider readback
+supplied an SSE-C block and explicit false bucket-key setting. Preserve the
+observed SSE-C denial explicitly in desired state, set bucket-key false for
+this AES256 configuration, and require a subsequent plan to exit 0. Runtime
+acceptance passed, but create 3 itself failed its final drift gate with exit 2.
+The corrected live plan subsequently passed with detailed-exitcode 0 and
+no changes (`evidence/encryption-no-change-plan.txt`). Complete published-pin create
+4 subsequently passed with exit 0 (`evidence/live-create-4.txt`).

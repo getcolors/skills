@@ -1,11 +1,12 @@
 # Acceptance doctrine
 
 Exit codes are not evidence; each gate asks the cluster what it actually
-has. All of these ran against the live three-replica cluster on 2026-09-03
-inside the `getcolors/langfuse` converge (`ansible/clickhouse.yml`), the
-application-host smoke (`ansible/langfuse-smoke.sh`) and the rehearsal
-(`ansible/rehearsal.yml`), and are repeatable with that package's `create`
-and `rehearse`. The application-level gates (ingestion, read-back through
+has. The original Vultr in-play, application-host and replica-loss gates
+were exercised on 2026-09-03 in `getcolors/langfuse` converge, smoke and
+rehearsal, through that package's `create` and `rehearse`. The corrected
+logical/physical backup protocol below comes from the September 10 AWS
+counterexample and rehearsal; the AWS section identifies those newer
+observations and remaining checks. The application-level gates (ingestion, read-back through
 the API, the restore-and-boot) are in [`langfuse-multi-node`]'s acceptance
 doctrine; this page is the ClickHouse operator's.
 
@@ -64,13 +65,23 @@ doctrine; this page is the ClickHouse operator's.
 
 1. `BACKUP DATABASE default TO Disk('backups', '<stamp>/') SETTINGS async =
    0 FORMAT TSV` → `id`, `status`; anything but `BACKUP_CREATED` fails.
-2. `num_files` and `total_size` for that `id` from `system.backups`.
-3. The recursive listing under `<stamp>/` (via rclone on an `s3_plain`
-   layout) has at least one object, includes `.backup` (ClickHouse writes
-   it last), and its count and byte total **equal** step 2 — a partial
-   upload or a scattering disk type fails here, not at restore time.
-4. `manifest.txt` (stamp, completion time, ClickHouse version, table count,
-   object count, bytes), then `.complete` **last**, written with read-back;
+2. Read logical `num_files`/`total_size` and physical `num_entries`,
+   `uncompressed_size`, `compressed_size` for the returned backup id.
+3. Read native `.backup` XML. Its logical file count and sum of logical sizes
+   must equal `num_files`/`total_size`. Resolve each nonempty file to its
+   `data_file` alias when present, otherwise its name, deduplicate physical
+   paths and require consistent sizes. Include `.backup` itself, then require
+   exact equality of that path/size map with the recursive S3 listing.
+   For the measured full, uncompressed `s3_plain` sets, physical object count
+   is `num_entries + 1`, and physical bytes equal `compressed_size` and
+   `uncompressed_size`. Reject incremental/base references in a verifier that
+   supports only full sets. This replaces the earlier, nonportable direct
+   listing-to-`num_files`/`total_size` rule: see [the AWS counterexample](aws.md#logical-backup-files-are-not-physical-s3-objects).
+4. Write the implementation's manifest (`manifest.txt` in the original
+   Langfuse/R2 scripts; `manifest.json` in standalone ClickHouse/AWS), then
+   `.complete` **last**, written with read-back. When checking a completed
+   set again, exclude only that chosen manifest and `.complete` from the
+   native physical map; all other objects must resolve from `.backup`.
    a set without a non-empty marker does not exist to restore or to
    freshness.
 5. Prune completed sets past retention only while a newer completed set
@@ -111,8 +122,52 @@ the queue drained to 0 after the restart.
   rule bounds the inconsistency instead; that rule is the application's.
 - **Per-object checksums or an incoming-to-final copy for backup sets.**
   Asked for by the post-build inspection, rejected as doubling the S3
-  traffic of every nightly set; the set-equality check against
-  `system.backups` was accepted as the evidence that adds something, and
-  the marker-last protocol already keeps a partial set from being selected.
+  traffic of every nightly set. The earlier direct counter comparison was
+  accepted in that review, but is superseded by the logical/physical mapping
+  correction above; marker-last selection remains required.
 - **Keeper snapshots or coordination-log backups.** The native `BACKUP`
   covers the tables; a full Keeper loss recovery was not rehearsed.
+
+## Standalone AWS assessment gates — runtime rehearsal passed
+
+The [AWS evidence ledger](aws.md) separates completed provisioning checks from
+the completed runtime, convergence and deletion gates. The workload is dbt `analytics`, not Langfuse `default`.
+
+- Native backup includes `analytics`; native logical metadata matches logical
+  counters, and resolved physical files match the S3 path/size map and
+  physical counters. Independent listing excludes `manifest.json` and
+  `.complete` from those native-file checks and
+  verifies native `.backup` metadata plus nonempty matching marker content.
+- Scoped backup IAM credentials list the backup bucket but receive HTTP 403
+  listing the state bucket; private/encrypted buckets and versioned state
+  are checked independently with operator credentials.
+- Restore `analytics AS restore_check`: compare actual `events_summary`
+  contents and require zero Keeper collisions; always drop the scratch copy.
+- Use a new outage probe ID every run, then require it on the surviving and
+  recovered nodes and drain the recovered queue. Scope analytics replica
+  counts so a persistent rehearsal table cannot break repeat convergence.
+- From Metabase's private interface, HTTP succeeds and Keeper 9181 is denied.
+  Public refusal and ICMP success do not substitute for this role gate.
+- Repeat convergence preserves a separately recorded workload probe. Full
+  deletion stops backup writers before removing their bucket; finalization
+  retry still works after compute retirement. Repeated deletion and exact
+  recorded EC2/EBS/VPC/key/IAM/bucket/DNS absence complete the lifecycle proof.
+
+Focused runtime gates passed in `evidence/live-rehearsal-3.txt`, with
+independent storage checks in `evidence/storage-isolation-1.json`: 53 logical
+files/5313 bytes, 36 physical S3 objects/13895 bytes; restored analytics rows
+matched, zero Keeper collisions, fresh-write outage/recovery, private Keeper
+denial, and three healthy monitors. Continuity, health and storage audits after pinned create 3 also passed.
+That create failed its final S3 drift gate with exit 2; complete convergence
+after correction passed in create 4 (exit 0, `evidence/live-create-4.txt`);
+full/repeated deletion subsequently passed in `evidence/live-delete-1.txt`
+and `evidence/live-delete-2.txt`. Independent `resources-after-delete.json`
+found zero remaining resources; `local-cleanup.json` confirmed managed
+SSH keys/aliases and local WireGuard configuration/interface absent.
+
+The AWS MTU correction has focused live evidence: the identical Python client
+that hung reading `system.settings` initialized and returned `SELECT 1` in
+under one second with all tunnel MTUs at 1420. Require this larger-response
+path in addition to a tiny HTTP health query. This focused pass does not
+substitute for complete published-pin convergence. The focused dbt and
+backup/recovery sequence subsequently passed as recorded above.

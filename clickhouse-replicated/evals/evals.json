@@ -32,14 +32,14 @@
       "id": 2,
       "name": "backup-random-objects-s3-disk",
       "prompt": "nightly clickhouse backups to cloudflare r2 via a storage_configuration disk and BACKUP DATABASE default TO Disk('backups', '20260903T065949Z/'). the query returns BACKUP_CREATED and system.backups says 270 files, but my verifier script fails with 'no objects under 20260903T065949Z/' and when i list the bucket there are ~130 objects named like agp/jjppeptxopeoqjzmlhpvtwrwopqkb. i need to be able to restore this on a rebuilt node. is r2 renaming my keys?",
-      "expected_output": "Should explain that a <type>s3</type> disk stores objects under random keys and keeps the path mapping in local metadata under /var/lib/clickhouse/disks/<name>/, so the set is only readable from that node and never appears under the stamp prefix; R2 is not renaming anything. Prescribe <type>s3_plain</type> for the backup disk (path-preserving, listable, restorable from anywhere), and for switching an existing disk: stop the server, remove the old local metadata directory, purge the stray objects, start, and confirm the disk in system.disks. Should recommend verifying a set by equality with system.backups (num_files and total_size for the backup id) plus the .backup file, and writing the completion marker last.",
+      "expected_output": "Should explain that a <type>s3</type> disk stores objects under random keys and keeps the path mapping in local metadata under /var/lib/clickhouse/disks/<name>/, so the set depends on that original local metadata (recoverable if preserved) and does not appear under the stamp prefix; R2 is not renaming anything. Prescribe <type>s3_plain</type> for the backup disk (path-preserving, listable, independent of the original disk metadata), and for switching an existing disk: stop the server, remove the old local metadata directory, purge the stray objects, start, and confirm the disk in system.disks. Should compare native logical metadata to num_files/total_size, resolve deduplicated physical objects including .backup to the exact S3 path/size map and physical counters, then write the completion marker last; direct physical listing versus logical counters is not portable.",
       "files": [],
       "assertions": [
         "Explains the random keys come from the s3 disk type keeping the path mapping in local metadata",
         "Prescribes the s3_plain disk type for BACKUP TO Disk destinations",
         "States that R2 is not at fault",
         "Mentions removing the old local disk metadata directory and the stray objects when switching the type",
-        "Recommends verifying the set against system.backups num_files/total_size rather than existence alone"
+        "Separates logical metadata counters from deduplicated physical S3 mapping instead of comparing the listing directly with num_files/total_size"
       ]
     },
     {
@@ -106,6 +106,86 @@
         "Uses system.replication_queue draining to 0 as the catch-up evidence",
         "Requires the restart to run in an always/finally path so a failed probe cannot leave the node down",
         "Warns that node 0 is the application's single point of failure and a node-0 loss was not drilled"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "aws-unexpanded-scaffold-yaml",
+      "prompt": "My ClickHouse AWS create allocated all four EC2 nodes and then Ansible says YAML parsing failed at line 158: [% if clickhouse-backup-bucket %]. ClickHouse has never started. Is this another Keeper XML issue?",
+      "expected_output": "Identify an unexpanded package scaffold conditional, which must use the package-supported <% ... %> delimiters. Inspect rendered YAML and syntax-check a backup-enabled AWS fixture before rerunning. Distinguish this from XML/systemd/Keeper startup failures.",
+      "files": [],
+      "assertions": [
+        "Diagnoses scaffold rendering before Ansible parsing",
+        "Names supported package delimiter <% ... %>",
+        "Requires rendered backup-enabled YAML validation",
+        "Does not diagnose XML or Keeper as the cause"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "repeated-outage-stale-record",
+      "prompt": "Our second replica-loss rehearsal passed almost instantly. It always runs INSERT SELECT 2 WHERE NOT EXISTS and reads id=2 from another replica, then waits for the restarted queue to empty. Does this prove new writes worked while the replica was stopped?",
+      "expected_output": "Explain that the second run can insert nothing and read stale data. Require a fresh run ID written unconditionally during outage, read it on a surviving replica and on the recovered replica, and keep unconditional recovery plus queue-drain checks.",
+      "files": [],
+      "assertions": [
+        "Identifies stale positive from fixed ID and conditional insert",
+        "Requires fresh per-run data written during outage",
+        "Checks exact new data on survivor and recovered node",
+        "Preserves always/finally restart and queue-drain gate"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "aws-default-backup-misses-analytics",
+      "prompt": "I copied the Langfuse ClickHouse backup into the standalone AWS/dbt package: BACKUP DATABASE default returns BACKUP_CREATED. My dashboards read analytics.events_summary. Can I call recovery verified if I restore default AS restore_check and count its tables?",
+      "expected_output": "Explain that default-only backup omits analytics. Include the actual workload database, restore analytics beside itself, verify events_summary content and zero Keeper path collisions, and require native S3 object/manifest equality. Tie claims to the separate measured rehearsal, published-pin convergence and deletion evidence; do not treat backup status alone as proof of recovery.",
+      "files": [],
+      "assertions": [
+        "Identifies wrong database despite BACKUP_CREATED",
+        "Requires actual analytics backup and restored content",
+        "Requires Keeper collision proof",
+        "Distinguishes required gates from verified AWS evidence"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "aws-wireguard-small-query-large-client-timeout",
+      "prompt": "ClickHouse AWS is healthy on three nodes. urllib SELECT version() over WireGuard as dbt works, but clickhouse_connect.get_client() hangs reading SELECT name,value,readonly FROM system.settings LIMIT 10000, then ReadTimeoutError and StreamFailureError('Stream failed during read (connection closed by server)'). Local wg MTU is 8920, servers 8921; ping payload 1372 works and 2000 fails. Should I raise the HTTP read timeout?",
+      "expected_output": "Diagnose the measured size-dependent WireGuard path MTU problem. Explain route/interface-derived automatic MTU does not establish public end-to-end path support. Set explicit tested 1420 on both owned client and server interfaces and template both, then retry the same larger initialization query. Preserve evidence limits; a tiny query or one focused pass is not full deployment acceptance.",
+      "files": [],
+      "assertions": [
+        "Identifies jumbo WireGuard MTU and size-dependent response failure",
+        "Requires adjustment on client and server interfaces",
+        "Uses 1420 as this deployment-tested setting rather than universal truth",
+        "Reruns failing larger client initialization instead of only ping",
+        "Does not treat increasing timeout as the fix"
+      ]
+    },
+    {
+      "id": 12,
+      "name": "s3-plain-logical-physical-counter-mismatch",
+      "prompt": "ClickHouse 26.3.29.7 BACKUP analytics,default to s3_plain says BACKUP_CREATED. Your old skill says S3 listing must equal num_files/total_size, but I have 30 objects and 9107 bytes versus 33 and 3875. num_entries is29, compressed_size9107. .backup is5254 bytes with33 file entries and four data_file aliases. Is this a partial upload?",
+      "expected_output": "Correct the old blanket gate. Logical metadata matches33/3875, dedup produces29 payload objects/3853 bytes, .backup adds one object/5254 bytes giving30/9107. Verify exact resolved physical map and num_entries+1/compressed_size separately from logical counters. Keep completion marker last and require restore evidence; do not diagnose partial upload from these counters alone.",
+      "files": [],
+      "assertions": [
+        "Explicitly retracts direct listing-to-logical-counter rule",
+        "Explains aliases and metadata object accounting",
+        "Requires exact resolved paths and sizes not only aggregate totals",
+        "Uses logical33/3875 and physical30/9107 correctly",
+        "Preserves marker-last and restore acceptance"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "hyphenated-on-cluster-sql-token",
+      "prompt": "My AWS cluster is named clickhouse-aws and clusterAllReplicas works. CREATE TABLE ... ON CLUSTER clickhouse-aws fails Code62 at position75 (-). Does Keeper reject AWS profile names?",
+      "expected_output": "Explain bare SQL token parsing at the hyphen; quote and escape configured cluster name appropriately in ON CLUSTER. The XML name can be valid while bare SQL use fails. Preserve credentials and do not remove no_log merely to expose an authenticated command.",
+      "files": [],
+      "assertions": [
+        "Identifies unquoted hyphenated SQL token",
+        "Quotes configured ON CLUSTER name safely",
+        "Distinguishes SQL parse failure from Keeper health",
+        "Keeps credential-bearing logs private"
       ]
     }
   ]
