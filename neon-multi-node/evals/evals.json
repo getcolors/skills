@@ -1,0 +1,101 @@
+{
+  "skill_name": "neon-multi-node",
+  "evals": [
+    {
+      "id": 0,
+      "name": "ssl-off",
+      "prompt": "My five-machine Neon deployment has an Active pageserver and compute is running, but psql says \"server does not support SSL, but SSL was required\". The spec already has compute_ctl_config.tls and the certificate files exist. Should I restart until it notices them?",
+      "expected_output": "Identify pinned compute.rs::tls_config experimental feature gate; Explain enabling tls_experimental alone is not the final verified fix; Route to native PostgreSQL SSL settings and external verify-full plus plaintext rejection.",
+      "files": [],
+      "assertions": [
+        "Identify pinned compute.rs::tls_config experimental feature gate",
+        "Explain enabling tls_experimental alone is not the final verified fix",
+        "Route to native PostgreSQL SSL settings and external verify-full plus plaintext rejection"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "certificate-parser",
+      "prompt": "After enabling tls_experimental, clients get server closed the connection unexpectedly. compute_ctl keeps logging \"could not create key file error=unknown TLS key type\". openssl shows Signature Algorithm: ecdsa-with-SHA384. Is my Cloudflare DNS wrong?",
+      "expected_output": "Identify helper signature OID/key parser mismatch at pinned source; Recommend verified native PostgreSQL SSL path rather than changing DNS; Do not recommend blindly reissuing certificates or disabling verification.",
+      "files": [],
+      "assertions": [
+        "Identify helper signature OID/key parser mismatch at pinned source",
+        "Recommend verified native PostgreSQL SSL path rather than changing DNS",
+        "Do not recommend blindly reissuing certificates or disabling verification"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "returning-tag",
+      "prompt": "The safekeeper outage rehearsal says FAIL AssertionError, but I can see the inserted quorum row. There is no rehearsal witness ledger. My helper returns the last line of psql -Atc output. Did Neon acknowledge a write and lose it?",
+      "expected_output": "Identify trailing INSERT 0 1 command tag and recommend psql -q; Separate committed row from harness assertion failure; Require a new complete rehearsal and exclude unledgered failed-attempt row.",
+      "files": [],
+      "assertions": [
+        "Identify trailing INSERT 0 1 command tag and recommend psql -q",
+        "Separate committed row from harness assertion failure",
+        "Require a new complete rehearsal and exclude unledgered failed-attempt row"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "uncertain-commit",
+      "prompt": "I stopped two safekeepers and my write timed out. When they came back the row appeared. Can I count the timeout as proof the write rolled back and safely repeat the request?",
+      "expected_output": "State timeout did not prove rollback; Explain actual verified uncertain row was present after recovery; Recommend transaction identity reconciliation and avoid assuming retry cannot duplicate work.",
+      "files": [],
+      "assertions": [
+        "State timeout did not prove rollback",
+        "Explain actual verified uncertain row was present after recovery",
+        "Recommend transaction identity reconciliation and avoid assuming retry cannot duplicate work"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "scope-of-recovery",
+      "prompt": "All three safekeeper outage writes survived and the pageserver recovered after deleting its tenant cache. We have S3 too. Can I tell users this is zero-RPO full HA across AWS?",
+      "expected_output": "Distinguish three-member WAL quorum from single compute/pageserver; State one-AZ and surviving-safekeeper limits; Reject unsupported zero full-storage-loss RPO or multi-zone claims.",
+      "files": [],
+      "assertions": [
+        "Distinguish three-member WAL quorum from single compute/pageserver",
+        "State one-AZ and surviving-safekeeper limits",
+        "Reject unsupported zero full-storage-loss RPO or multi-zone claims"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "constant-witness",
+      "prompt": "Every outage test writes the same id and value and the final read still says survived. Is that enough to prove the write made while each safekeeper was stopped survived pageserver recovery?",
+      "expected_output": "Require unique per-fault identity and value with acknowledged ledger; Explain old equal value can mask latest-write loss; Require independent exact pair readback after recovery.",
+      "files": [],
+      "assertions": [
+        "Require unique per-fault identity and value with acknowledged ledger",
+        "Explain old equal value can mask latest-write loss",
+        "Require independent exact pair readback after recovery"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "cleanup-cwd",
+      "prompt": "Delete says Cannot run program ansible-playbook and No such file or directory. which ansible-playbook succeeds, but the .colors Ansible directory has vanished. It worked during create. Should I reinstall Ansible?",
+      "expected_output": "Check missing subprocess cwd rather than assume executable missing; Explain Green scaffold delete removes targets; Render cleanup artifacts under build then retain original delete semantics and current-run writer proof.",
+      "files": [],
+      "assertions": [
+        "Check missing subprocess cwd rather than assume executable missing",
+        "Explain Green scaffold delete removes targets",
+        "Render cleanup artifacts under build then retain original delete semantics and current-run writer proof"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "retired-backend",
+      "prompt": "Full teardown succeeded and AWS shows no resources. A second delete says compute state unavailable; legacy monolithic state requires explicit migration. GetObject says NoSuchBucket. Should I recreate the state bucket or just ignore every inspection error?",
+      "expected_output": "Distinguish NoSuchBucket after backend retirement from missing key or migration; Route managed-delete verification through authenticated owner-checking finalizer; Reject blanket success on errors and retain denial foreign-owner live-reference failures.",
+      "files": [],
+      "assertions": [
+        "Distinguish NoSuchBucket after backend retirement from missing key or migration",
+        "Route managed-delete verification through authenticated owner-checking finalizer",
+        "Reject blanket success on errors and retain denial foreign-owner live-reference failures"
+      ]
+    }
+  ]
+}
