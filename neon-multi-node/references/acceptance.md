@@ -3,6 +3,11 @@
 All evidence filenames refer to
 [the AWS deployment evidence directory](https://github.com/getcolors/neon-multi-node-aws/tree/main/evidence).
 
+The sections below retain the original Green deployment proof. Later native
+Red/Blue evidence and per-lifecycle witness counts are separated in
+[runtime boundaries](runtimes.md). Do not transfer a successful gate between
+source pins or combine witnesses from different fresh databases.
+
 ## Create and external client path
 
 Successful published create3 and create4 ran the server gates and seven external

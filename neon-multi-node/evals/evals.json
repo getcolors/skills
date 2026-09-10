@@ -96,6 +96,42 @@
         "Route managed-delete verification through authenticated owner-checking finalizer",
         "Reject blanket success on errors and retain denial foreign-owner live-reference failures"
       ]
+    },
+    {
+      "id": 8,
+      "name": "runtime-handoff",
+      "prompt": "Red created my Neon profile. Blue create exits zero against it, but I only counted five instances. Can I say switching runtimes preserved the database?",
+      "expected_output": "Require matching five instance and volume identities and six container identities; Require exact persistent SQL witness readback through trusted external TLS; Keep one lifecycle operation per profile and distinguish create handoff from recovery or deletion proof.",
+      "files": [],
+      "assertions": [
+        "Require matching five instance and volume identities and six container identities",
+        "Require exact persistent SQL witness readback through trusted external TLS",
+        "Keep one lifecycle operation per profile and distinguish create handoff from recovery or deletion proof"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "negative-exit",
+      "prompt": "My native Blue workflow treats Terraform destroy status -15 as success and clears rendered files. Can I fix this by converting the final CLI exit to 1?",
+      "expected_output": "Identify negative subprocess status versus positive-only failure contract; Normalize at the SDK execution boundary before Terraform cleanup, with timeout124 and SIGTERM143; Pin direct and transitive SDK overrides and distinguish offline fake-Terraform tests from live cloud interruption.",
+      "files": [],
+      "assertions": [
+        "Identify negative subprocess status versus positive-only failure contract",
+        "Normalize at the SDK execution boundary before Terraform cleanup, with timeout124 and SIGTERM143",
+        "Pin direct and transitive SDK overrides and distinguish offline fake-Terraform tests from live cloud interruption"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "bun-cold-cache",
+      "prompt": "My copied Red launcher says colors-compute-red failed to resolve despite exact Git SHAs. It works in my warm checkout. Should I ship it after one retry?",
+      "expected_output": "Identify observed intermittent pinned Git dependency resolution failure on Bun1.3.10 without asserting an unproved internal root cause; Use pinned launcher immutable commit archives and consistent overrides; Require genuinely fresh-cache published payload tests without local library overrides.",
+      "files": [],
+      "assertions": [
+        "Identify observed intermittent pinned Git dependency resolution failure on Bun1.3.10 without asserting an unproved internal root cause",
+        "Use pinned launcher immutable commit archives and consistent overrides",
+        "Require genuinely fresh-cache published payload tests without local library overrides"
+      ]
     }
   ]
 }

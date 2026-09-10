@@ -1,5 +1,7 @@
 # Verified pins and retest conditions
 
+## Original Green deployment
+
 Verified September 10, 2026, profile neon-multi-node-aws, AWS us-east-1a.
 The successful create4 and rehearsals2/3 runtime was package commit
 `910862079124a533dfc1f382d888210038c595e7`; launcher commit `a875af5`
@@ -53,3 +55,19 @@ On psql changes, rerun realistic RETURNING/command-tag tests and the live
 read-only transaction probe. On compute/storage changes, rerun role isolation,
 backend credential denials, protected deletion and complete absence audits.
 Claims are unknown after their relevant pins move until these gates pass again.
+
+## Later native Red and Blue qualification
+
+The September 10 native Red/Blue create, both same-profile handoff orders and
+both recovery rehearsals, protected deletion and complete cleanup use application
+source `038e93d524552ef36fb0fff5f306352e68283bff` and launcher bootstrap fix
+`62e63a7a63ae5c5ab46cbb73b8dad06d14ab0734`. Later package head
+`5208bc1c02c916582d93d6152d0e4e4404c10d6f` changes tests, not that application pin.
+Red SDK is `7636bee6a7575485ebaf621f4b1834bdcea59738`; Blue SDK is
+`e29a7fc5a7a2895eacb882fc65520c2cdbab96c9`. colors-compute and both Neon
+image digests remain those above. Dependency manifests and overrides must agree.
+
+Observed operator Bun was 1.3.10 and uv was 0.12.6 on aarch64; other operator
+versions match the original table. See `evidence/red-blue/operator-versions.json`
+and [runtime boundaries](runtimes.md) for the distinction between live create
+proof, offline subprocess regressions and offline cold-cache qualification.

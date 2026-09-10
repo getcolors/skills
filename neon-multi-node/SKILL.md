@@ -1,6 +1,6 @@
 ---
 name: neon-multi-node
-description: Use when self-hosted Neon says "server does not support SSL, but SSL was required", compute_ctl logs "unknown TLS key type", a safekeeper outage rehearsal fails with "FAIL AssertionError", psql returns "INSERT 0 1" instead of the expected value, a timed-out quorum write appears after recovery, cleanup reports Ansible ENOENT, repeat delete reports migration after removing its backend, or three safekeepers and S3 are being mistaken for complete HA. Verified AWS multi-node TLS, SQL witness, WAL quorum, S3 recovery and lifecycle contracts.
+description: Use when self-hosted Neon says "server does not support SSL, but SSL was required", compute_ctl logs "unknown TLS key type", a safekeeper outage rehearsal fails with "FAIL AssertionError", psql returns "INSERT 0 1" instead of the expected value, a timed-out quorum write appears after recovery, cleanup reports Ansible ENOENT, repeat delete reports migration after removing its backend, or three safekeepers and S3 are being mistaken for complete HA. Also use when changing Red/Blue runtimes on one profile, negative subprocess exits bypass failure gates, or Bun cold dependency resolution fails. Verified AWS multi-node TLS, SQL witness, WAL quorum, S3 recovery and lifecycle contracts.
 ---
 
 # Neon Multi-Node
@@ -16,6 +16,9 @@ description: Use when self-hosted Neon says "server does not support SSL, but SS
 | Three safekeepers or S3 presented as complete HA or zero RPO | [Acceptance boundaries](references/acceptance.md) |
 | Installed Ansible reports ENOENT during deletion | [Scaffold event](references/failure-catalogue.md#ansible-exists-but-cleanup-reports-enoent) |
 | Repeat delete reports migration after backend retirement | [Missing bucket vs missing key](references/failure-catalogue.md#repeat-delete-reports-migration-after-complete-cleanup) |
+| Switching native runtimes on an existing deployment | [Runtime handoff proof](references/runtimes.md#live-runtime-handoff) |
+| Timeout or signal is reported as success | [SDK exit-status boundary](references/runtimes.md#negative-subprocess-status-bypasses-failure) |
+| Copied Red launcher fails to resolve pinned Git dependencies | [Cold Bun resolution](references/runtimes.md#bun-cold-git-resolution) |
 | Resource template cannot be found, or ingress validation fails offline | [Build traps](references/failure-catalogue.md#offline-build-traps) |
 
 ## Provenance and ownership
@@ -34,6 +37,13 @@ run on those machines. Three independent safekeeper disks provide a WAL quorum;
 the one compute and one pageserver remain service failure points. Native
 PostgreSQL TLS is reached through a DNS-only Cloudflare record and a restricted
 client CIDR. Managed S3 backend and application buckets are separate resources.
+
+The original Green recovery and deletion proof below is retained separately from
+the later [native Red/Blue verification](references/runtimes.md). Runtime handoff
+was verified in both directions across two fresh lifecycles, with recovery and
+complete cleanup separately checked for each native runtime. Switching still
+requires matching profile, dependency pins and state contracts; invoke only one
+lifecycle operation for a profile at a time.
 
 ## Diagnose the boundary that actually failed
 
