@@ -71,3 +71,11 @@ Observed operator Bun was 1.3.10 and uv was 0.12.6 on aarch64; other operator
 versions match the original table. See `evidence/red-blue/operator-versions.json`
 and [runtime boundaries](runtimes.md) for the distinction between live create
 proof, offline subprocess regressions and offline cold-cache qualification.
+
+Final native publication is package head
+`413eec3a863744a6a53ea1b552461b983ce7bafb`, whose three launchers stamp
+`1eb421263e0aa2b6552948355c7591a1c749dae6`. That source adds verified
+operational documentation; runtime code, resources and dependency manifests
+are unchanged from the live-tested `038e93d` source. The launcher cold-resolution
+fix described above remains present. These publication pins do not imply a new
+cloud run at the documentation commit.
