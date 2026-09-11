@@ -70,46 +70,61 @@ Claims decay when pins move. These have known retest conditions:
   `vhp-8c-16gb-amd` with NVMe and the declared workload mix. A different disk
   class invalidates them; `vc2-*` plans are SSD, not NVMe.
 
-## AWS port, offline validation
+## AWS deployment
 
-Offline-validated on 2026-09-11; no host has run this set. Package feature
-commit `2979693f3371b69cc26d93d413bfcea18b0089d5`, launchers stamped by
-`cf35a44ba4c5dc86a5a4a6dd88b004a60b82286f`; the acceptance-step sudo fix
-`be6a5efbf39a9c61341139172b2924f1e78d3a47`, launchers stamped by `91a483d`;
-the `n8n-aws` deployment's `skills-lock.json` records `package-n8n-green`
-from that last publication. The
-image pins in the table above are unchanged by the port, and the AWS fixture
-carries the same five digests. See `aws.md` for what was and was not
-exercised.
+Verified 2026-09-11, profile `n8n-aws`, AWS account `251213589273`,
+`us-east-1a`, `t3.xlarge`: three creates, all 18 host gates, the backup,
+soak, rehearsal, prune and recreate drills, and two deletes, recorded in the
+deployment's `verification.md` and `evidence/` at
+`e41c76c0987f97f7fbfa3790978c2e3c1871fd39`. The package moved during the
+day: the feature `2979693f3371b69cc26d93d413bfcea18b0089d5` and the sudo fix
+`be6a5efbf39a9c61341139172b2924f1e78d3a47` (launchers `91a483d`) ran creates
+1 and 2; the SSE fix `e95536f3f0de81d8d9a93ca30cefce06c22b7e4b` ran create 3
+and both deletes at the final pin below. The green launcher ran; red and
+blue are held byte-identical by parity and did not converge on AWS. The
+image pins in the table above are unchanged by the port, and the AWS
+fixture carries the same five digests. See `aws.md` for what was and was
+not exercised.
 
-| Component | Pin or declared value |
+| Component | Pin or observed value |
 |---|---|
+| Package `getcolors/n8n` | `600b8092e38ebd996f37f1a1a2ad345580bc262a` (feature `2979693`, sudo fix `be6a5ef`, SSE fix `e95536f`) |
+| Launchers | stamped by `9238423f657c111c0c94c8f2589fc8f20182164c`; the deployment's `skills-lock.json` records `package-n8n-green` from that publication |
 | Green SDK | `3f33f5d4dcce1f8d97a11b6972e13eb3f0b37654` (the tofu launch-failure exit) |
 | colors-compute | `09ec539e75dc21c4dafb019eb8f9da276e695f6f` (managed S3 backend); the same SHA in `green/deps.edn`, `red/package.json` and `blue/pyproject.toml` |
 | Reused Neon package | `e19a213067d307b55d1b37a2e83cdc1a150b7d91` |
 | ONCE dependency | `a1fe1be7a427dd2e406ff7befd1c43a53e7c3618` |
-| AWS provider, storage stage | `hashicorp/aws` 6.31.0 |
-| AMI | `ami-025d99823a4caad37`, declared as Ubuntu 24.04 amd64. The same AMI booted as Ubuntu 24.04.4 LTS for the `neon-multi-node` skill on 2026-09-10; that is its evidence, not this skill's |
-| Instance | `t3.xlarge` (4 vCPU, 16 GiB), `us-east-1a` |
-| Root volume | `aws-root-volume-size-gb: 60`; the deployment's comments call it encrypted gp3, and what the adapter renders is `colors-compute`'s to prove |
+| AWS provider, storage stage | `hashicorp/aws` 6.31.0; the plan after create 2 was non-empty at the undeclared SSE rule, and `No changes` after create 3 with `blocked_encryption_types` and `bucket_key_enabled` declared |
+| AMI | `ami-025d99823a4caad37`, declared as Ubuntu 24.04 amd64; booted this deployment with login `ubuntu` (`local-ssh-after-create.txt`) |
+| Instance | `t3.xlarge` (4 vCPU, 16 GiB), `us-east-1a`; `i-0795bb42f1e4d27c8` while it existed |
+| Root volume | `{"size":60,"type":"gp3","encrypted":true}` (`storage-after-create.txt`) |
 | VPC / subnet | `10.76.0.0/16` / `10.76.1.0/24` |
-| Host packages | not observed; the Vultr row above is the last observation |
+| Security group | 15 IPv4 Cloudflare ranges on 80 and 443, one `/32` on 22, no IPv6 rules (`storage-after-create.txt`) |
+| Host packages | not captured on AWS; the Vultr row above is the last observation |
 
 ### Retest conditions for the AWS set
 
-- The first live converge is itself the retest of everything in `aws.md`;
-  until it runs, that file's claims stay source-derived.
-- Any `colors-compute` bump that touches the managed backend, the AWS adapter
-  or the finalization statuses (`destroyed`, `absent`, `skipped`): re-run a
-  delete and a second delete.
-- Any `hashicorp/aws` bump in the storage stage: re-run the post-apply plan.
-  The clickhouse sibling saw SSE readback drift at 6.31.0 with the SSE shape
-  this stage still carries.
-- A Neon pin bump: the `COLORS_PAR_NEON_R2_*` lookups in the upstream play are
-  the interface the managed pairs ride on; a renamed lookup silently empties
-  `/etc/neon/r2.env`, and the upstream play's own "empty R2 key id" check is
-  what would catch it.
-- The soak thresholds: the 2026-09-01 numbers are `vhp-8c-16gb-amd` NVMe
-  numbers and do not transfer to `t3.xlarge` on gp3. The AWS deployment
-  inherits the same thresholds, and the first live soak decides whether they
-  hold.
+- **The soak numbers.** `2930 executions, 0 failed`, `p95=120ms p99=153ms`,
+  `host memory 12% disk 28%`, one 300 s run on `t3.xlarge` with gp3 at the
+  deployment's thresholds of 150 ms and 500 ms (`soak-1.txt`). They are not
+  comparable to the Vultr NVMe figures (7950 / 75 / 80): a different disk
+  class and CPU. p95 sits 30 ms under its threshold and p99 sits 347 ms
+  under its own, so a slower volume class fails the gate at p95 first. An
+  instance family or volume class change invalidates the numbers; a second
+  run on the same shape has not been done.
+- **Any `hashicorp/aws` bump in the storage stage.** Re-run `tofu plan` in
+  `n8n-storage` after the second create. The template now declares the
+  readback 6.31.0 produced; a later provider or a later S3 default can move
+  it again.
+- **Any `colors-compute` bump** that touches the managed backend, the AWS
+  adapter or the finalization statuses (`destroyed`, `absent`, `skipped`):
+  re-run a delete and a second delete.
+- **A Neon pin bump.** The `COLORS_PAR_NEON_R2_*` lookups in the upstream
+  play are the interface the managed pairs ride on; a renamed lookup
+  silently empties `/etc/neon/r2.env`, and the upstream play's own "empty R2
+  key id" check is what would catch it.
+- **A new AMI id** reopens the host-package row and the `ubuntu` login the
+  acceptance step's `sudo -n` read depends on.
+- **The Cloudflare token's TTL.** The token that carried this run expires
+  2026-09-19; the next converge after that date meets 9109 unless it is
+  renewed first.

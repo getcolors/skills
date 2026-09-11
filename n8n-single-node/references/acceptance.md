@@ -163,8 +163,19 @@ credential to share, so the validator's sharing rule does not apply and
 `r2-credential-sharing` is not required. Gate R2 still runs, in `split` mode,
 and lists the Neon prefix with the backup pair from the host; a listing that
 S3 permits fails the converge. The policy is what makes the pass expected.
-The gate is what makes it evidence. Neither has run against a real endpoint
-yet; `aws.md` says what has.
+The gate is what makes it evidence. Both ran on `n8n-aws` on 2026-09-11: the
+gate passed in `split` mode, and the refusal underneath it was IAM's, read
+on the host in both directions (`credential-isolation.txt`; `aws.md`).
+
+**Post-apply drift is a gate worth having.** On that deployment the second
+create reported exit 0 while a read-only `tofu plan` in the storage stage
+still had two changes: the SSE rule the provider reads back differed from
+the one declared, and every converge removed and re-added it
+(`storage-plan-after-create-2.txt`). An apply's success is not a plan's
+emptiness. The package has no drift gate in this stage; run the plan after
+the second create, expect `No changes`, and treat anything else as a
+finding, the way the `clickhouse` package's final drift gate does with
+`-detailed-exitcode`.
 
 The same review found that the gate as first shipped could never pass at all:
 it read a controller variable from a host-side script (the catalogue entry

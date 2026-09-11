@@ -1,6 +1,6 @@
 ---
 name: n8n-single-node
-description: Self-hosted n8n 2.x traps the docs and every guide omit - n8n refusing to boot with "Mismatching encryption keys" that "does not match the N8N_ENCRYPTION_KEY env var" after one bad first boot, "password authentication failed for user" from a literal unrendered template string, /healthz returning 200 while every API call answers 503 "Database is not ready!", "Workflow must be archived before it can be deleted", "To run the workflow manually, specify either a trigger to start from or a destination node", pg_dump "aborting because of server version mismatch", and WEBHOOK_URL deprecated in favour of N8N_WEBHOOK_URL. AWS additions cover Cloudflare 9109 "Invalid access token" then 10502 "Too many authentication failures", a backup-scope gate printing RISK on every run, and managed S3 buckets with one IAM key each (offline-validated only, not live). Use for self-hosted n8n on Postgres or Neon behind Cloudflare and Caddy, on Vultr or AWS. Full symptom index at the top of the body.
+description: Self-hosted n8n 2.x traps the docs and every guide omit - n8n refusing to boot with "Mismatching encryption keys" that "does not match the N8N_ENCRYPTION_KEY env var" after one bad first boot, "password authentication failed for user" from a literal unrendered template string, /healthz returning 200 while every API call answers 503 "Database is not ready!", "Workflow must be archived before it can be deleted", "To run the workflow manually, specify either a trigger to start from or a destination node", pg_dump "aborting because of server version mismatch", and WEBHOOK_URL deprecated in favour of N8N_WEBHOOK_URL. AWS additions cover Cloudflare 9109 "Invalid access token" then 10502 "Too many authentication failures", a backup-scope gate printing RISK on every run, tofu planning an SSE rule update in-place on every apply, and BACKUP_CREDENTIAL_MODE=none without sudo. Use for self-hosted n8n on Postgres or Neon behind Cloudflare and Caddy, on Vultr or AWS. Full symptom index at the top of the body.
 ---
 
 # Single-node self-hosted n8n
@@ -51,7 +51,16 @@ with verbatim symptoms in `references/failure-catalogue.md`:
   [IPv4 only, ubuntu, ambient auth](references/aws.md#the-aws-adapter-is-ipv4-only-the-login-is-ubuntu-and-aws-auth-is-ambient)
 - AWS: `acceptance: could not read the generated role password over ssh`
   after every host-side gate passed: see
-  [the acceptance step without sudo](references/aws.md#the-operator-side-acceptance-step-read-the-role-password-without-sudo)
+  [the acceptance step through sudo](references/aws.md#the-acceptance-step-reads-the-role-password-through-sudo)
+- AWS: `tofu plan` in the storage stage says
+  `aws_s3_bucket_server_side_encryption_configuration.application["neon"]
+  will be updated in-place` after every converge, removing
+  `blocked_encryption_types = ["SSE-C"]` and `bucket_key_enabled = false`:
+  see [the SSE rule the provider reads back](references/aws.md#the-storage-stage-plans-the-sse-update-on-every-converge)
+- AWS: `BACKUP_CREDENTIAL_MODE=none` and `rclone` answering `AccessDenied:
+  Access Denied` after sourcing `n8n-env.sh` as `ubuntu`, on a host whose
+  gate R2 passed in `split` mode: see
+  [the probe without sudo](references/aws.md#sourcing-n8n-envsh-without-sudo-reports-none)
 
 ## What this covers, and what paid for it
 
@@ -68,6 +77,9 @@ three-round adversarial plan review, seventeen acceptance gates, and five
 operational drills (load soak, retention, full-stack recreate, unattended
 reboot, and a restore rehearsal).
 
+On 2026-09-11 the same package ran its full lifecycle on AWS; that evidence
+has its own section below and its own reference file.
+
 Everything here was verified against a running deployment unless it says
 otherwise. Where this skill contradicts n8n's own documentation, the version's
 own environment-variable reference or a live probe is the authority, and the
@@ -76,29 +88,46 @@ entry says which.
 **Most of it transfers to any self-hosted n8n on Postgres.** The Neon-specific
 parts are marked; the n8n 2.x parts apply whatever the database is.
 
-## AWS support has its own, narrower, evidence
+## AWS evidence has its own scope
 
 On 2026-09-11 the [`getcolors/n8n`](https://github.com/getcolors/n8n) package
 gained AWS support in all three colours (feature commit
-`2979693f3371b69cc26d93d413bfcea18b0089d5`, launchers pinned in `cf35a44`,
-then the sudo fix `be6a5ef` pinned in `91a483d`), modelled on the langfuse package's AWS port, and the public
-[`getcolors/n8n-aws`](https://github.com/getcolors/n8n-aws) deployment was
-created with that pin installed by the Skills CLI. Read
-[references/aws.md](references/aws.md) for the managed S3 lifecycle, the
-backup-credential finding, and what a live run must still prove.
+`2979693f3371b69cc26d93d413bfcea18b0089d5`), modelled on the langfuse
+package's AWS port, and the public
+[`getcolors/n8n-aws`](https://github.com/getcolors/n8n-aws) deployment
+(profile `n8n-aws`, AWS account `251213589273`, `us-east-1a`, `t3.xlarge`)
+ran the full lifecycle against it the same day. Read
+[references/aws.md](references/aws.md) for the managed S3 lifecycle, the two
+findings, and what remains unverified.
 
-**Nothing on AWS was verified live.** What passed: the unit suites in three
-colours (green 46 tests, red 58, blue 68), golden renders for three fixtures,
-three-colour parity byte for byte, an offline `ansible-playbook
---syntax-check`, and `./green build` and `./green create --dry-run` from the
-deployment checkout. No AWS resource has been created and no converge has
-run: every Cloudflare token on the build machine answered
-`{"code":9109,"message":"Invalid access token"}` that day, including the one
-that had created a record in the same zone the day before from the same
-address. Every AWS claim in this skill is therefore labelled
-**source-derived** (read from the code) or **offline-validated** (exercised
-by a test, a render or a dry run), never "verified live". The Vultr claims
-keep their 2026-09-01 provenance and are unchanged.
+**Three creates, all 18 host gates, five drills and two deletes passed.**
+Create 1 returned exit 0 after 677 s; the host gates passed in 27 s with
+gate R2 in `split` mode among them; the edge answered 200 through Cloudflare
+on a Let's Encrypt certificate while the origin's 80 and 443 timed out from
+the workstation; IAM refused each bucket-scoped key a listing of the other
+bucket with `is not authorized to perform: s3:ListBucket on resource`;
+backup set `20260911T065341Z` uploaded in 15 s and verified against its
+manifest; the soak passed at 2930 executions, 0 failed, SQL p95 120 ms and
+p99 153 ms; the restore rehearsal (login, credential decrypted by execution,
+binary readable), the prune drill and the recreate drill passed; create 2
+(304 s) and create 3 (287 s) were idempotent; the delete guard refused with
+exit 2 without the override; delete 1 took 251 s and delete 2 took 4 s
+through the finalize-only path; the audit afterwards found zero deployment
+resources, no local key and no SSH alias block. The record is the
+deployment's `verification.md` and `evidence/*.txt` at commit `e41c76c`.
+The deployment no longer exists.
+
+Two findings came out of the day. The acceptance step read the generated
+role password without `sudo`, which works as `root` on Vultr and is refused
+as `ubuntu` on AWS; `be6a5ef` reads it through `sudo -n`, and all three
+creates passed with it. And the storage stage planned an in-place update of
+both buckets' SSE rule after every converge, because S3 now creates buckets
+with SSE-C blocked and the bucket key off and the rule declared neither;
+`e95536f` declares both, and the plan after create 3 read `No changes`. The
+final pins are package `600b809` and launchers `9238423`. Only the green
+colour converged on AWS; red and blue are held byte-identical by parity and
+have not run there. The Vultr claims keep their 2026-09-01 provenance and
+are unchanged.
 
 ## The reference implementation, and why this skill ships no assets
 
@@ -321,4 +350,4 @@ anyway while writing the line. **Prose gets read once. A gate runs every time.**
 - `references/pins.md` — the verified-good version set and the rules that generated it
 - `references/failure-catalogue.md` — symptom-indexed, verbatim
 - `references/acceptance.md` — what each gate checks and why
-- `references/aws.md`: the AWS port, offline validation only, with source-derived findings and what a live run must still prove
+- `references/aws.md`: the AWS deployment, verified live on 2026-09-11, with the two findings and what remains unverified

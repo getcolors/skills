@@ -168,6 +168,34 @@
         "Prescribes installing the backup pair on the host, a separate rclone remote, and a host-side probe with that pair",
         "Frames the general rule that a gate reporting one outcome on every run is not measuring anything"
       ]
+    },
+    {
+      "id": 12,
+      "name": "storage-sse-plan-every-apply",
+      "prompt": "terraform wants to update my bucket encryption on every apply. aws provider 6.31, two s3 buckets for an n8n deployment, sse rule is just apply_server_side_encryption_by_default { sse_algorithm = \"AES256\" }. every plan says aws_s3_bucket_server_side_encryption_configuration will be updated in-place and shows blocked_encryption_types = [\"SSE-C\"] -> null and bucket_key_enabled = false -> null then adds the rule back with blocked_encryption_types = []. the apply succeeds and the deploy tool reports success every time. is something else modifying my buckets between runs?",
+      "expected_output": "Should explain nothing else is touching the buckets: S3 now creates buckets with SSE-C blocked and the bucket key off, the provider reads both back, and a rule that declares neither is planned as a remove-and-re-add on every apply. Should prescribe declaring blocked_encryption_types = [\"SSE-C\"] and bucket_key_enabled = false beside the AES256 default, keeping the denial S3 applied rather than trying to remove it, and running a plan afterwards to confirm No changes. Should point out that a deploy reporting success only proves the apply succeeded, and recommend a post-apply plan as a gate.",
+      "files": [],
+      "assertions": [
+        "States that S3's current bucket defaults (SSE-C blocked, bucket key off) are what the provider reads back",
+        "Identifies the undeclared attributes in the rule as the cause of the perpetual in-place update",
+        "Prescribes declaring blocked_encryption_types = [\"SSE-C\"] and bucket_key_enabled = false alongside AES256",
+        "Advises against trying to clear the SSE-C block to match the template",
+        "Recommends a plan after apply as a gate, since a successful apply does not prove an empty plan"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "backup-credential-mode-none-without-sudo",
+      "prompt": "checking the backup isolation on my n8n host on aws (ubuntu login). the acceptance run said 'R2 backup credential is scoped away from live data' and the backup set uploaded fine, but when i ssh in and source /etc/n8n/n8n-env.sh myself and run rclone lsf backup:the-backup-bucket i get BACKUP_CREDENTIAL_MODE=none and 'Failed to lsf: error in ListJSON: AccessDenied: Access Denied status code: 403'. so is the credential actually installed or not? did the gate lie?",
+      "expected_output": "Should identify that the operator sourced the script as an unprivileged user: the backup pair lives in a root-owned 0600 file, the script reads it with sed and discards the error, so the pair reads as empty, the mode becomes none and the rclone remote has no key at all. The AccessDenied is S3 refusing an anonymous request, not IAM refusing a scoped key. Should tell the user to repeat the probe with sudo (expect BACKUP_CREDENTIAL_MODE=split and a listing), note that the systemd units run as root and the gate ran as root, and that the gate did not lie. Should suggest reading the mode line before the rclone error on any host whose login is not root.",
+      "files": [],
+      "assertions": [
+        "Identifies the unprivileged shell as the cause, via the root-owned 0600 credential file",
+        "Explains that the mode none means the script found no pair, so the remote had no key",
+        "Distinguishes the anonymous-request AccessDenied from an IAM denial of a scoped key",
+        "Prescribes re-running the probe under sudo and expecting split",
+        "Does not conclude that the gate or the installed credential is wrong"
+      ]
     }
   ]
 }

@@ -2,9 +2,12 @@
 
 Symptom-indexed. Search for the string on your screen.
 
-Every entry was observed on a running deployment during the build that produced
-this skill, except the two AWS-era entries at the end, each of which says what
-produced it. Where a fix is stated, it is the fix that made the gate pass.
+Every entry was observed on a running deployment: the 2026-09-01 Vultr build
+that produced this skill, or the 2026-09-11 `n8n-aws` lifecycle. The two
+exceptions say so: the Cloudflare 9109 entry was observed on the build
+machine, and the backup-scope entry was a code-review finding whose fix was
+then observed passing on AWS. Where a fix is stated, it is the fix that made
+the gate pass.
 
 ---
 
@@ -304,8 +307,10 @@ cause by hours.
 ## Cloudflare: `{"code":9109,"message":"Invalid access token"}` from `/zones`, then `{"code":10502,"message":"Too many authentication failures. Please try again later."}`
 
 Observed from the build machine on 2026-09-11 while preparing the first
-`n8n-aws` converge. Not observed on a running deployment; it is the reason
-there is none.
+`n8n-aws` converge. Not observed on a running deployment; it is why that
+converge waited for a re-minted token, which answered `status: active` on
+the account endpoint (expiry 2026-09-19) and then carried the full lifecycle
+the same day.
 
 ```
 GET /zones?name=<zone> -> HTTP 403
@@ -384,6 +389,102 @@ endpoint answers; `shared` still prints `RISK`; `none` fails.
 **The general shape:** a gate that reads a controller-side variable from a
 host-side script measures the absence of the controller, not the property.
 When a gate reports the same thing on every run, name the input that would
-change its answer, supply it, and watch. Offline-validated only: the
-rendering and the play's syntax are covered by the suites; the endpoint's
-refusal is what a live run must show. See `aws.md`.
+change its answer, supply it, and watch.
+
+**Status: fixed and verified live on 2026-09-11.** On `n8n-aws` gate R2
+passed in `split` mode, `ok    R2 backup credential is scoped away from live
+data` (`smoke-after-create-1.txt`), and the refusal it stands on was read
+directly on the host (`credential-isolation.txt`):
+
+```
+2026/09/11 06:54:20 ERROR : : error listing: AccessDenied: User: arn:aws:iam::251213589273:user/n8n-aws-storage-backup is not authorized to perform: s3:ListBucket on resource: "arn:aws:s3:::n8n-aws-neon-251213589273-us-east-1" because no identity-based policy allows the s3:ListBucket action
+```
+
+with the mirror-image denial for `n8n-aws-storage-neon` on the backup
+bucket. See `aws.md`.
+
+---
+
+## The storage stage plans `aws_s3_bucket_server_side_encryption_configuration.application[...] will be updated in-place` on every converge
+
+Observed on `n8n-aws` on 2026-09-11 after the second create
+(`storage-plan-after-create-2.txt`). The converge had returned exit 0.
+
+```
+  # aws_s3_bucket_server_side_encryption_configuration.application["backup"] will be updated in-place
+  ~ resource "aws_s3_bucket_server_side_encryption_configuration" "application" {
+        id     = "n8n-aws-backup-251213589273-us-east-1"
+        # (2 unchanged attributes hidden)
+
+      - rule {
+          - blocked_encryption_types = [
+              - "SSE-C",
+            ] -> null
+          - bucket_key_enabled       = false -> null
+
+          - apply_server_side_encryption_by_default {
+              - sse_algorithm = "AES256" -> null
+            }
+        }
+      + rule {
+          + blocked_encryption_types = []
+
+          + apply_server_side_encryption_by_default {
+              + sse_algorithm = "AES256"
+            }
+        }
+    }
+Plan: 0 to add, 2 to change, 0 to destroy.
+```
+
+The `["neon"]` instance showed the same hunk. The template declared
+`sse_algorithm = "AES256"` and nothing else; S3 creates buckets with
+`BlockedEncryptionTypes: SSE-C` and `BucketKeyEnabled: false` (an
+`aws s3api get-bucket-encryption` readback, recorded in the deployment's
+`verification.md`), and `hashicorp/aws` 6.31.0 reads both back, finds
+neither declared, and removes and re-adds the rule on every apply. Nothing
+fails and nothing is logged by the converge; only a plan run afterwards
+shows it.
+
+**Fix (in `getcolors/n8n` `e95536f`):** declare
+`blocked_encryption_types = ["SSE-C"]` and `bucket_key_enabled = false`
+beside the AES256 default, keeping the denial S3 applied rather than fighting
+it. The plan after the next create read
+`No changes. Your infrastructure matches the configuration.`
+(`storage-plan-after-create-3.txt`). The `clickhouse-replicated` skill
+recorded the same readback at the same provider pin on 2026-09-10; the
+`langfuse`, `automq` and `neon-multi-node` storage templates still carry the
+undeclared rule in their working trees and are expected, from source, to
+plan the same update.
+
+**The general shape:** a converge that reports exit 0 has proven the apply
+succeeded, not that the plan is empty. Run the plan after the second create
+and treat a non-empty one as a finding.
+
+---
+
+## `BACKUP_CREDENTIAL_MODE=none` and `AccessDenied: Access Denied` after sourcing `n8n-env.sh` without sudo
+
+Observed on `n8n-aws` on 2026-09-11 (`backup-verify-1.txt`), seconds after
+the backup service had uploaded a set and `--verify-only` had matched it.
+
+```
+BACKUP_CREDENTIAL_MODE=none
+2026/09/11 06:54:08 Failed to lsf: error in ListJSON: AccessDenied: Access Denied
+	status code: 403, request id: JJTWFAT0KQ4RY1GJ, host id: mnJ3zF9YEDKkCvSQne0X63aooZYvw9IFqgteqXrBug4yH640kec6VHKTiGYQpvQSvKtAbTTHl31U2LaqjFOPuFpO9VO3Vp2T
+```
+
+`n8n-env.sh` reads the backup pair from `/etc/colors/backup-r2.env` with
+`sed`, and that file is root-owned, mode `0600`, with `sed`'s errors sent to
+`/dev/null`. Sourced as `ubuntu`, the pair reads as two empty strings, the
+script records `none`, and the `backup:` remote carries no key at all. The
+`AccessDenied` is S3 refusing an anonymous request; it is not IAM refusing a
+scoped key, though it reads like the isolation gate failing in the wrong
+direction. The same two commands as root print `BACKUP_CREDENTIAL_MODE=split`
+and the listing (`credential-isolation.txt`); the systemd units run as root
+and never meet this.
+
+**Read the mode line before the rclone line.** `none` on a host whose play
+converged (the play refuses to converge on `none`) means the reader lacks
+the credential, not the host. Probe with `sudo`, or `sudo -i`, on any host
+whose login is not `root`.
