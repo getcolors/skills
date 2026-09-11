@@ -1,6 +1,6 @@
 ---
 name: automq-multi-node
-description: Diagnose multi-node AutoMQ deployments backed by object storage. Use for KRaft stuck in CandidateState or waiting for the high water mark, SCRAM-SHA-512 invalid credentials for every principal, missing KafkaServer JAAS entries, gates that pass only once, and bucket or SSH key ownership failures. Carries verified Vultr, AWS and Google Cloud context, listener and genesis contracts, and targeted failover acceptance gates.
+description: Diagnose multi-node AutoMQ deployments backed by object storage. Use for KRaft stuck in CandidateState or waiting for the high water mark, SCRAM-SHA-512 invalid credentials for every principal, missing KafkaServer JAAS entries, gates that pass only once, and bucket or SSH key ownership failures. Carries verified Vultr, AWS and Google Cloud context plus OCI conditional-write, identity and VM allocation failures, listener and genesis contracts, and targeted failover acceptance gates.
 ---
 
 # Multi-node AutoMQ
@@ -35,6 +35,31 @@ Each has a full entry, with verbatim text, in
   succeed. See `references/gcloud.md`.
 - base apt installation stalls while the global Ubuntu security archive times
   out but the regional Google archive responds. See `references/gcloud.md`.
+- OCI S3 compatibility rejects a competing create but accepts a stale
+  `If-Match` replacement, or a newly created customer secret key returns
+  `SignatureDoesNotMatch` for several minutes. See `references/oci.md`.
+- OCI rejects valid-looking VM settings with `Valid ratio range: 0 - 0` or
+  returns `500-InternalError, Out of host capacity.` despite positive service limits. See
+  `references/oci.md`.
+- OCI managed user creation returns `IdcsConversionError` with
+  `The primary email must be specified.`, or a failed node create still
+  blocks convergence after the shape changes. See `references/oci.md`.
+- A failed OCI VM create leaves owned buckets and network resources, but
+  delete returns `managed backend finalization refused; live or unowned
+  state remains` or `compute cluster unavailable; refusing placeholder inventory`.
+  See `references/oci.md`.
+- OCI partial deletion returns `invalid SSH host inventory` before reaching
+  storage or shared-resource cleanup. See `references/oci.md`.
+
+- OCI storage cleanup fails after a successful multipart-list command
+  returns empty stdout. See `references/oci.md`.
+
+- Native OCI bucket update returns `404 NotFound` after the marker enters
+  `deleting`; check the operation's HTTP method. See `references/oci.md`.
+
+- An interrupted OCI finalization returns `compute state unavailable; legacy
+  monolithic state requires explicit migration` despite a retired journal.
+  See `references/oci.md`.
 
 ## What this stack is
 
@@ -47,7 +72,8 @@ endpoint is `SASL_SSL` with SCRAM and an ACL authorizer.
 The tested implementation is `github.com/getcolors/automq`. The original
 Vultr deployment is `github.com/getcolors/automq-vultr`; the AWS lifecycle
 assessment is `github.com/getcolors/automq-aws`. The Google Cloud deployment
-is `github.com/getcolors/automq-gcloud`. Claims come from those live
+is `github.com/getcolors/automq-gcloud`. OCI storage probes are in
+`github.com/getcolors/automq-oci`. Claims come from those live
 builds at the pins in `references/pins.md`, except where marked unverified.
 Provider-specific observations retain their original scope. This skill carries
 no copies of the implementation's files.
@@ -55,7 +81,10 @@ no copies of the implementation's files.
 For Google Cloud provisioning, GCS signing and bucket lifecycle evidence, read
 `references/gcloud.md`. Two complete live converges, data continuity, deletion and an independent
 resource audit passed. For AWS lifecycle-owned buckets and
-IP-address certificates, read `references/aws.md`. The Vultr firewall and Cloudflare R2 observations below
+IP-address certificates, read `references/aws.md`. For OCI scoped storage probes, failed VM allocation and verified partial
+deployment cleanup, read
+`references/oci.md`. No OCI broker launched, so Kafka acceptance and repeated
+full convergence remain untested. The Vultr firewall and Cloudflare R2 observations below
 are evidence for that deployment, not defaults for every provider.
 
 ## Replication factor 1 is the architecture
@@ -201,3 +230,5 @@ lego 5.x moved its flags under the subcommand; see failure-catalogue 7.
 
 - `references/aws.md`, AWS lifecycle, private CA and verification scope
 - `references/gcloud.md`, Google Cloud failure modes and verified acceptance and cleanup
+
+- `references/oci.md`, OCI conditional-write failures and credential propagation

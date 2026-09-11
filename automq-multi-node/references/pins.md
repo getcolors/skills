@@ -116,3 +116,46 @@ probes. HTTP 200 without competitor refusal does not prove ownership safety.
 
 The published deployment and evidence are pinned at
 [automq-gcloud c5184d352fbb6467e179137f32ef6913368e8bc0](https://github.com/getcolors/automq-gcloud/commit/c5184d352fbb6467e179137f32ef6913368e8bc0).
+
+## OCI assessment, 2026-09-11
+
+The OCI assessment used profile `automq-oci` in `eu-frankfurt-1` with only OCI
+state, data and ops buckets. It retained the AutoMQ 1.7.4 image digest above,
+but never launched a broker. Shape validation and capacity failures prevented
+VM allocation. No OCI Kafka acceptance or repeated cluster convergence is
+claimed.
+
+The attempted ARM image was
+`Canonical-Ubuntu-24.04-aarch64-2026.08.25-0`,
+`ocid1.image.oc1.eu-frankfurt-1.aaaaaaaatnudwzlqzctpx5rrxohiionypan5fngceqdbybtw6ve7oyhmnnqq`.
+The compute stage used `oracle/oci` 8.4.0. The storage stage pinned
+`oracle/oci` 7.32.0 and `hashicorp/tls` 4.1.0.
+The operator CLI was OCI 3.90.2 with Python SDK 2.165.1.
+
+The scoped storage probe ran the actual package storage step with development
+source overrides and the service-user email correction before its publication
+in AutoMQ `ec23c98b91ff7a8238fcf9ff039d00f061b0dccf`. The native conditional-write
+and lease implementation was unchanged from source
+`71b6032bd7576531149910d65ca64c811bf106fb`. Do not describe that probe as a
+complete deployment using only published dependencies.
+
+The final published package is AutoMQ
+`d37766dbac4f115f543fa55cdbd3f25d46a4fc32`; its launchers load source
+`ace2f656236741df3d92a6319599e27fd7dbd11f` with colors-compute
+`58ac766d17cc1b174992986c1088d9d7045e13b5`. Publishing those pins does not
+retroactively establish cluster acceptance. `oci.md` records the observed
+storage, provisioning and partial-deletion behavior.
+
+On an OCI SDK, provider or signing change, repeat both allowed and refused
+conditional creates and replacements, verify the final object value, and
+exercise lease renewal, expiry takeover and stale release. Repeat application
+state-denial probes against an operator-proven existing bucket and object.
+For lifecycle changes, test partial deletion and interrupted finalization,
+including native version pagination and the final independent resource audit.
+
+The [deployment and evidence](https://github.com/getcolors/automq-oci/commit/19b1a9e15f1d95bc3db7fe24840015c0e9718251) are pinned at
+`19b1a9e15f1d95bc3db7fe24840015c0e9718251`. Published-pin build, create dry-run
+and repeated deletion exited 0 without development overrides. The final native
+audits confirmed owned-resource absence and preservation of the borrowed
+network. These checks establish partial-deployment cleanup, not OCI Kafka
+acceptance.

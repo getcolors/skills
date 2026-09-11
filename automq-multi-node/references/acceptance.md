@@ -103,3 +103,16 @@ Stated so nothing here reads as a stronger claim than the build supports:
 - **A gate that cannot fail.** If a gate would pass on a broken cluster, it is
   decoration. The clearest example here: a generic produce/consume round trip
   after killing a broker.
+
+## OCI assessment scope, 2026-09-11
+
+The OCI assessment did not launch a broker. Shape validation and physical
+capacity errors prevented VM allocation. It therefore did not run the
+on-host or public Kafka gates above, continuity, targeted failover, or repeated
+full cluster convergence.
+
+The actual managed storage stage passed synthetic object round trips,
+conditional writes, lease exclusion and state-bucket denial with its scoped
+application identity. A second successful storage create had a no-change
+plan. These are separate storage claims, recorded in `oci.md`; synthetic
+objects are not evidence of AutoMQ object creation or acknowledged records.

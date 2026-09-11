@@ -78,6 +78,60 @@
       "name": "gcs-conditional-header-dialect",
       "prompt": "My boto3 GCS request with x-goog-if-generation-match got ExcessHeaderValues: Requests cannot specify both x-amz and x-goog headers. I renamed it x-amz-if-generation-match and now both writers get 200. Is conditional ownership working?",
       "expected_behaviour": "Recognizes mixed signing/header dialects and the verified silently ignored x-amz condition alias. Requires coherent x-goog headers before canonical signing and negative live tests: competitor create and stale generation replacement must fail while initial create and exact-generation replacement succeed. Does not treat HTTP 200 as proof of conditional semantics or isolated signing probes as full deployment acceptance."
+    },
+    {
+      "id": 13,
+      "name": "oci-stale-etag-write-succeeds",
+      "prompt": "My OCI S3 compatibility probe rejects a second If-None-Match create with 412. A PUT with the current ETag succeeds, but another PUT with that old ETag also returns 200 and the GET says stale. Can I trust this endpoint for expired AutoMQ restart lease takeover?",
+      "expected_behaviour": "Routes to the verified OCI compatibility failure. Explains that conditional creation and conditional replacement are separate contracts and the stale PUT violated replacement exclusion. Requires a native conditional operation or another proven compare-and-swap path, negative stale-writer tests and final-value checks through the installed client. Does not accept the successful create condition as proof of lease safety or claim full cluster acceptance from a storage probe."
+    },
+    {
+      "id": 14,
+      "name": "oci-customer-secret-propagation",
+      "prompt": "I just created an OCI customer secret key for AutoMQ. The compatibility endpoint still refuses authentication several minutes later. Should I generate another secret, or just sleep for eight minutes?",
+      "expected_behaviour": "Uses the observed OCI propagation interval without treating it as a provider guarantee. Reports the last failed sample at 7 minutes 15.456 seconds and first success at 8 minutes 15.498 seconds after creation. Retains the generated secret, uses bounded authenticated readiness probes, separates credential readiness from bucket permissions, and never prints the secret."
+    },
+    {
+      "id": 15,
+      "name": "oci-state-404-isolation",
+      "prompt": "The AutoMQ application key gets 404 when it reads the OCI state bucket. I want to mark backend isolation passed. The same bucket might also be missing. What proves which explanation is right?",
+      "expected_behaviour": "Requires operator-identity native bucket and ownership-object existence checks before interpreting application 403 or concealed 404 as denial. Uses the same existing resource for the application probe and refuses to equate 404 alone with either safe isolation or absence."
+    },
+    {
+      "id": 16,
+      "name": "oci-zero-memory-ratio-and-capacity",
+      "prompt": "OCI refuses my AutoMQ A2 launch with Invalid ratio of memory in GB to OCPUs. Current ratio: 4.0. Valid ratio range: 0 - 0. I requested 1 OCPU and 8GB, the shape says flexible and my limits are positive. A1 in the same region says Out of host capacity. Should I set memory to zero or assume the provider doubled my OCPUs?",
+      "expected_behaviour": "Routes to the observed OCI provisioning failures. Does not interpret zero-range metadata as a valid zero-memory configuration or invent a quota cause. Distinguishes A2 core/OCPU accounting from requested OCPUs and notes that 8GiB, 6GiB and omitted-memory attempts all failed. Checks image compatibility, shape metadata, limits and actual allocation independently. Explains positive limits do not establish physical capacity and does not claim cluster acceptance when no VM launched."
+    },
+    {
+      "id": 17,
+      "name": "oci-service-user-primary-email",
+      "prompt": "My AutoMQ OCI storage stage created buckets, then oci_identity_user.application failed with IdcsConversionError: The primary email must be specified. The provider let me omit email. Should I delete the state and rerun?",
+      "expected_behaviour": "Identifies the observed Identity Domains requirement. Sets explicit tenancy-unique automq-oci-user-email, preserves existing stage state, and distinguishes a failed user operation from rollback of buckets and other resources. Does not claim successful broker acceptance from a completed storage stage."
+    },
+    {
+      "id": 18,
+      "name": "oci-failed-create-needs-absence-proof",
+      "prompt": "OCI rejected all AutoMQ VM launches. I changed A2 to A1, but compute still refuses the failed create. The node state has serial1 and no params. Can I clear the failed operation in the journal?",
+      "expected_behaviour": "Uses the pinned compute library explicit OCI recovery function instead of manual journal edits. Requires current failed operation IDs, empty valid state and complete native VM/boot-volume absence checks under the journal lease, across the original compartment and domains. Treats terminating resources and empty CLI stdout as insufficient absence evidence. Notes resource-name matching limits after out-of-band renames."
+    },
+    {
+      "id": 19,
+      "name": "oci-partial-delete-skips-owned-resources",
+      "prompt": "No AutoMQ VM ever launched on OCI, but I have three owned buckets, an NSG and application IAM keys. After recovering the failed creates, delete jumps straight to backend finalization, which refuses active state. Does no running VM mean I can bypass that check and delete the backend?",
+      "expected_behaviour": "Identifies the partial-deployment deletion routing defect. Distinguishes inspection error from verified absence, keeps finalizer refusal intact, and requires owned application storage/IAM, shared resources and SSH key cleanup before state finalization. Explains that declared never-created nodes with validated empty state need a journal/state transition rather than provider destruction. Does not infer a successful cleanup from the absence of VMs or a safe refusal."
+    },
+    {
+      "id": 20,
+      "name": "oci-bucket-update-wrong-method",
+      "prompt": "My AutoMQ state bucket marker says deleting and the journal is retired, but native PUT on the bucket endpoint gets 404 NotFound during finalization. No versions have been purged yet. Should I assume the bucket vanished and remove its local state?",
+      "expected_behaviour": "Identifies the verified UpdateBucket method mismatch: native OCI bucket updates use POST. Checks operation and method before interpreting 404 as absence. Preserves deleting marker and retired journal, resumes normal finalization after the method correction, and does not create a replacement backend or bypass ownership guards."
+    },
+    {
+      "id": 21,
+      "name": "oci-retired-held-journal-resume",
+      "prompt": "The AutoMQ compute journal is retired, its identity is right, and backend finalization was interrupted while holding its lease. Normal delete now says compute state unavailable; legacy monolithic state requires explicit migration. Is this actually old state that I need to migrate?",
+      "expected_behaviour": "Identifies the verified classification-order defect. Requires valid journal schema and matching deployment identity before recognizing retired status, then routes to guarded backend finalization even if its old finalizer lease is held. Keeps active held journals excluded, and does not infer legacy state from the generic error or manually clear ownership evidence."
     }
   ]
 }
