@@ -253,12 +253,14 @@ before from the same egress address. Repeated probes escalated to
 later."}` for several minutes, for every token. Probe once per token, not in
 a loop; the second message hides the first.
 
-Distinguish it from the catalogue's zone-scoped-token entry: there
-`/user/tokens/verify` says `Invalid API Token` while `/zones` answers
-normally, and the token is fine. Here `/zones` itself refuses, with a
-different code and a different wording; the token is rejected upstream
-whatever its scope, and a new token is the next step, not a different
-endpoint.
+The cause came from the one endpoint that reports an account-owned token's
+state: `GET /accounts/<account id>/tokens/verify`, with the account id taken
+from the R2 endpoint host, answered `{"status":"expired"}` for the shared
+token and `Invalid API Token` for the four older ones. The shared token had
+a TTL; the others were revoked. `/user/tokens/verify` cannot answer for an
+account-owned token at all (the catalogue's zone-scoped entry), and `/zones`
+only says no. A new token is the next step either way, but ask the account
+endpoint first: it names the cause and it does not feed the lockout.
 
 ## What a live run must still prove
 

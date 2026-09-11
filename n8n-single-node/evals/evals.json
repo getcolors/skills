@@ -145,14 +145,14 @@
       "id": 10,
       "name": "cloudflare-9109-then-10502",
       "prompt": "trying to deploy a new n8n instance on aws behind cloudflare. the dns step fails: the cloudflare api answers 403 {\"code\":9109,\"message\":\"Invalid access token\"} on GET /zones. this exact token created a dns record in the same zone YESTERDAY from this same server. i tried the other two tokens i have and they say the same, and now every call returns {\"code\":10502,\"message\":\"Too many authentication failures. Please try again later.\"} even for the good one. i read that the verify endpoint gives false negatives for zone scoped tokens so i'm not sure the token is really bad. should i skip dns and create the ec2 instance and the buckets first while i sort this out?",
-      "expected_output": "Should separate this from the zone-scoped-token trap: that one is /user/tokens/verify saying Invalid API Token while /zones works; here /zones itself answers 9109, so the token is rejected upstream regardless of scope and a new token is the fix. Should explain 10502 is a lockout caused by the repeated probes, hides the underlying answer for several minutes, and means probe once per token, not in a loop. Should advise against running compute or the storage stage alone: DNS sits between storage and the converge, so a partial create leaves a billable instance with no name and nothing verified.",
+      "expected_output": "Should separate this from the zone-scoped-token trap: that one is /user/tokens/verify saying Invalid API Token while /zones works; here /zones itself answers 9109. Should send the user to GET /accounts/{account_id}/tokens/verify, the only endpoint that reports an account-owned (cfat_) token's status, which distinguishes expired (a TTL ran out) from revoked, and does not count towards the lockout. Should explain 10502 is a lockout caused by the repeated probes, hides the underlying answer for several minutes, and means probe once per token, not in a loop. Should advise against running compute or the storage stage alone: DNS sits between storage and the converge, so a partial create leaves a billable instance with no name and nothing verified.",
       "files": [],
       "assertions": [
         "Distinguishes 9109 on /zones from the /user/tokens/verify false negative for zone-scoped tokens",
+        "Points to GET /accounts/{account_id}/tokens/verify as the probe that reports expired versus revoked for an account-owned token",
         "States that 10502 is a lockout from repeated failed probes and advises probing once per token",
-        "Recommends minting a new Cloudflare token rather than trying more endpoints",
-        "Advises against creating compute or buckets without the DNS stage",
-        "Does not treat the token as valid merely because it worked the day before"
+        "Recommends minting a new Cloudflare token once the account endpoint says expired or invalid",
+        "Advises against creating compute or buckets without the DNS stage"
       ]
     },
     {

@@ -323,14 +323,29 @@ address. A few repeated probes escalated to
 which then held for several minutes, for every token. Probe once per token,
 not in a loop: the second message hides the first.
 
+Neither `/zones` nor `/user/tokens/verify` can tell you *why*. The tokens in
+this workspace are account-owned (`cfat_` prefix), and only the account
+endpoint reports their state:
+
+```
+GET /accounts/<account id>/tokens/verify -> {"success":true,"result":{"status":"expired"}}
+```
+
+The account id is the host of the R2 endpoint the deployments already carry
+(`https://<account id>.eu.r2.cloudflarestorage.com`). On the build machine
+that probe answered `expired` for the token that had worked the day before
+(it carried a TTL) and `Invalid API Token` for the four older ones (revoked).
+Ask this endpoint first: `expired` and `revoked` both need a new token, but
+the answer says which happened, and it does not count towards the lockout
+the way a failing `/zones` call does.
+
 This is not the zone-scoped-token entry above. There,
 `/user/tokens/verify` says `Invalid API Token` while `/zones` answers
-normally, and the token is fine. Here `/zones` itself refuses, with a
-different code and a different wording; the token is rejected upstream
-whatever its scope, and the fix is a new token, not a different endpoint.
-The DNS stage sits between storage and the converge in this package, so a
-rejected token blocks everything after compute. Do not run compute alone to
-make progress: it leaves a billable instance with no name and proves nothing.
+normally, and the token is fine. Here `/zones` itself refuses and the account
+endpoint names the cause. The DNS stage sits between storage and the converge
+in this package, so a rejected token blocks everything after compute. Do not
+run compute alone to make progress: it leaves a billable instance with no
+name and proves nothing.
 
 ---
 
