@@ -319,11 +319,13 @@ S3 applied rather than trying to remove it. Launchers `9238423`, checkout
 `No changes. Your infrastructure matches the configuration.`, `plan exit=0`
 (`storage-plan-after-create-3.txt`).
 
-Source-derived, an expectation and not an observation: the `langfuse`,
-`automq` and `neon-multi-node` storage templates carry the same undeclared
-rule in their working trees on 2026-09-11 (`4ce273a`, `debb50b`, `413eec3`),
-so the same perpetual plan is expected there at provider 6.31.0 and has not
-been observed for them by this skill.
+Source-derived: the `langfuse`, `automq` and `neon-multi-node` storage
+templates carried the same undeclared rule, and the same two attributes were
+declared there later the same day (`langfuse` `4102122`, `automq` `d8babcf`,
+`neon-multi-node` `2a67094`, each pinned into its launchers and refreshed
+into its AWS deployment checkout). Their golden, parity and launcher checks
+passed; no converge has yet shown their plan going empty, so for those three
+the fix is offline-validated, and the drift itself was never observed there.
 
 The package has no post-apply drift gate in this stage; the plan after the
 second create is the operator's to run, and `acceptance.md` now says why it
@@ -489,6 +491,7 @@ Each of these is outside what the 2026-09-11 evidence covers.
 9. **A delete while a backup is running.** Delete 1's Ansible step stopped
    the host before storage removal; whether a set mid-upload races the
    bucket's `force_destroy` was not provoked.
-10. **The other packages' SSE drift.** Expected from source for `langfuse`,
-    `automq` and `neon-multi-node`, observed only here and in
-    `clickhouse-replicated`.
+10. **The other packages' SSE fix.** `langfuse`, `automq` and
+    `neon-multi-node` now declare the two attributes; their plans going
+    empty after a converge is not yet observed. The drift was observed only
+    here and in `clickhouse-replicated`.

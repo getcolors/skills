@@ -453,9 +453,9 @@ it. The plan after the next create read
 `No changes. Your infrastructure matches the configuration.`
 (`storage-plan-after-create-3.txt`). The `clickhouse-replicated` skill
 recorded the same readback at the same provider pin on 2026-09-10; the
-`langfuse`, `automq` and `neon-multi-node` storage templates still carry the
-undeclared rule in their working trees and are expected, from source, to
-plan the same update.
+`langfuse`, `automq` and `neon-multi-node` storage templates carried the
+same undeclared rule and declare both attributes since `4102122`, `d8babcf`
+and `2a67094` respectively, offline-validated only.
 
 **The general shape:** a converge that reports exit 0 has proven the apply
 succeeded, not that the plan is empty. Run the plan after the second create
