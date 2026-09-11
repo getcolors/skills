@@ -140,6 +140,34 @@
         "Offers proxying the record, widening the firewall, or DNS-01 as fixes",
         "Mentions using the origin address for ssh once the record is proxied"
       ]
+    },
+    {
+      "id": 10,
+      "name": "cloudflare-9109-then-10502",
+      "prompt": "trying to deploy a new n8n instance on aws behind cloudflare. the dns step fails: the cloudflare api answers 403 {\"code\":9109,\"message\":\"Invalid access token\"} on GET /zones. this exact token created a dns record in the same zone YESTERDAY from this same server. i tried the other two tokens i have and they say the same, and now every call returns {\"code\":10502,\"message\":\"Too many authentication failures. Please try again later.\"} even for the good one. i read that the verify endpoint gives false negatives for zone scoped tokens so i'm not sure the token is really bad. should i skip dns and create the ec2 instance and the buckets first while i sort this out?",
+      "expected_output": "Should separate this from the zone-scoped-token trap: that one is /user/tokens/verify saying Invalid API Token while /zones works; here /zones itself answers 9109, so the token is rejected upstream regardless of scope and a new token is the fix. Should explain 10502 is a lockout caused by the repeated probes, hides the underlying answer for several minutes, and means probe once per token, not in a loop. Should advise against running compute or the storage stage alone: DNS sits between storage and the converge, so a partial create leaves a billable instance with no name and nothing verified.",
+      "files": [],
+      "assertions": [
+        "Distinguishes 9109 on /zones from the /user/tokens/verify false negative for zone-scoped tokens",
+        "States that 10502 is a lockout from repeated failed probes and advises probing once per token",
+        "Recommends minting a new Cloudflare token rather than trying more endpoints",
+        "Advises against creating compute or buckets without the DNS stage",
+        "Does not treat the token as valid merely because it worked the day before"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "backup-scope-gate-always-risk",
+      "prompt": "n8n on neon with backups going to a separate r2 bucket. i finally made a bucket scoped token for backups and i export COLORS_PAR_N8N_BACKUP_R2_ACCESS_KEY_ID and the secret in my shell before every converge. the launcher stopped complaining about credential sharing, but the acceptance output still prints 'RISK R2 credential separation NOT in place -- accepted in desired state' every single run. i even removed r2-credential-sharing from colors.yml and it still says accepted. is the gate reading a cached result somewhere?",
+      "expected_output": "Should suspect the gate rather than the credential: a gate that prints the same line on every run regardless of input is measuring nothing. Should explain the shape: the smoke script runs on the host and tests a COLORS_PAR_* variable that exists only in the controller's shell, so it is always empty there; the launcher validates the pair and then renders it into nothing, so backups keep using the Neon pair from /etc/neon/r2.env. Should tell the user to check what the host actually has (a backup credential file on the host, a separate rclone remote in the backup script) and prescribe the fix: install the backup pair on the host in its own file, give backups their own remote, and have the gate probe the live bucket with the backup pair from the host. May mention that getcolors/n8n commit 2979693 made exactly that change.",
+      "files": [],
+      "assertions": [
+        "Identifies that the smoke gate runs on the host and reads a controller-only environment variable",
+        "Explains that the launcher validated the backup pair without rendering it anywhere",
+        "States that backups were still using the Neon credential despite the scoped token",
+        "Prescribes installing the backup pair on the host, a separate rclone remote, and a host-side probe with that pair",
+        "Frames the general rule that a gate reporting one outcome on every run is not measuring anything"
+      ]
     }
   ]
 }

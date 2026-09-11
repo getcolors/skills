@@ -153,6 +153,25 @@ and have the gate report `RISK` on every run rather than a quiet `skip`.
 A skip reads as "not applicable". An accepted risk is not the same thing and
 should not be spelled the same way.
 
+### Managed buckets
+
+On AWS with `n8n-storage-managed: true` the question this gate asks is
+settled before the converge rather than during it: the storage stage mints
+one IAM user, one bucket-scoped policy and one access key per bucket, and the
+pairs reach the play in the subprocess environment only. There is no operator
+credential to share, so the validator's sharing rule does not apply and
+`r2-credential-sharing` is not required. Gate R2 still runs, in `split` mode,
+and lists the Neon prefix with the backup pair from the host; a listing that
+S3 permits fails the converge. The policy is what makes the pass expected.
+The gate is what makes it evidence. Neither has run against a real endpoint
+yet; `aws.md` says what has.
+
+The same review found that the gate as first shipped could never pass at all:
+it read a controller variable from a host-side script (the catalogue entry
+"The backup-scope gate reports `RISK` on every run"). A gate that reports one
+outcome on every run is not measuring anything. Before trusting a gate, name
+the input that would flip it, and flip it once.
+
 ## The three meta-rules
 
 **A gate that is never invoked is worse than no gate.** Inheriting a package's

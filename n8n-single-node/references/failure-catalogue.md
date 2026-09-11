@@ -3,7 +3,8 @@
 Symptom-indexed. Search for the string on your screen.
 
 Every entry was observed on a running deployment during the build that produced
-this skill. Where a fix is stated, it is the fix that made the gate pass.
+this skill, except the two AWS-era entries at the end, each of which says what
+produced it. Where a fix is stated, it is the fix that made the gate pass.
 
 ---
 
@@ -297,3 +298,77 @@ request finds a certificate that was never issued.
 The two settings are coupled: Cloudflare-only ingress **requires** a proxied
 record. Make it a validator rule — the failure is otherwise separated from its
 cause by hours.
+
+---
+
+## Cloudflare: `{"code":9109,"message":"Invalid access token"}` from `/zones`, then `{"code":10502,"message":"Too many authentication failures. Please try again later."}`
+
+Observed from the build machine on 2026-09-11 while preparing the first
+`n8n-aws` converge. Not observed on a running deployment; it is the reason
+there is none.
+
+```
+GET /zones?name=<zone> -> HTTP 403
+  {"code":9109,"message":"Invalid access token"}
+```
+
+Every token on the machine answered the same way, including the one that had
+created a record in the same zone the day before from the same egress
+address. A few repeated probes escalated to
+
+```
+  {"code":10502,"message":"Too many authentication failures. Please try again later."}
+```
+
+which then held for several minutes, for every token. Probe once per token,
+not in a loop: the second message hides the first.
+
+This is not the zone-scoped-token entry above. There,
+`/user/tokens/verify` says `Invalid API Token` while `/zones` answers
+normally, and the token is fine. Here `/zones` itself refuses, with a
+different code and a different wording; the token is rejected upstream
+whatever its scope, and the fix is a new token, not a different endpoint.
+The DNS stage sits between storage and the converge in this package, so a
+rejected token blocks everything after compute. Do not run compute alone to
+make progress: it leaves a billable instance with no name and proves nothing.
+
+---
+
+## The backup-scope gate reports `RISK` on every run, whatever credential is in the shell
+
+A code-review finding, read from the `getcolors/n8n` source before commit
+`2979693`; the fix is in that commit. No host reported a wrong answer that was
+recognised as wrong at the time: the 2026-09-01 build printed `RISK`, and
+that was read as the accepted shared posture.
+
+```
+  RISK  R2 credential separation NOT in place -- accepted in desired state.
+        One credential reaches OpenTofu state, live Neon data and backups.
+```
+
+The launcher validated `COLORS_PAR_N8N_BACKUP_R2_ACCESS_KEY_ID` and its secret
+on the controller, then rendered them into nothing. The smoke gate ran on the
+host and tested `${COLORS_PAR_N8N_BACKUP_R2_ACCESS_KEY_ID:-}` there, where the
+controller's environment does not exist, so the variable was always empty and
+the gate always took the `RISK` branch. Had it been non-empty, the probe
+listed the Neon bucket through the only rclone remote that existed, built
+from the Neon pair, so the gate would have reported `FAIL`. Backups meanwhile
+ran on the Neon pair. There was no input under which the gate could pass, and
+nothing said so.
+
+**Fix (in `2979693`):** install the backup pair on the host
+(`/etc/colors/backup-r2.env`, `0600`, through `copy: content:`), give backups
+their own rclone remote (`backup:` beside `store:`), record
+`BACKUP_CREDENTIAL_MODE` as `split`, `shared` or `none` in `n8n-env.sh`,
+refuse to converge on `none` ("no backup credential: supply
+COLORS_PAR_N8N_BACKUP_R2_* or record r2-credential-sharing: shared-accepted"),
+and have the gate build a probe remote from the backup pair on the host and
+list the Neon prefix with it. `split` then passes or fails on what the
+endpoint answers; `shared` still prints `RISK`; `none` fails.
+
+**The general shape:** a gate that reads a controller-side variable from a
+host-side script measures the absence of the controller, not the property.
+When a gate reports the same thing on every run, name the input that would
+change its answer, supply it, and watch. Offline-validated only: the
+rendering and the play's syntax are covered by the suites; the endpoint's
+refusal is what a live run must show. See `aws.md`.

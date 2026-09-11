@@ -1,6 +1,6 @@
 ---
 name: n8n-single-node
-description: Everything a self-hosted n8n 2.x deployment needs that the docs and every third-party guide will not tell you - n8n refusing to boot with "Mismatching encryption keys. The encryption key in the settings file /home/node/.n8n/config does not match the N8N_ENCRYPTION_KEY env var" after one bad first boot, "password authentication failed for user" when the password is a literal unrendered template string, /healthz returning 200 while every API call answers 503 "Database is not ready!", DELETE refused with "Workflow must be archived before it can be deleted", "To run the workflow manually, specify either a trigger to start from or a destination node", pg_dump "aborting because of server version mismatch", and WEBHOOK_URL quietly deprecated in favour of N8N_WEBHOOK_URL. Use whenever the user self-hosts n8n on Postgres, puts its database on Neon or object storage, fronts it with Cloudflare and Caddy, or hits any symptom above. Full symptom index at the top of the body.
+description: Self-hosted n8n 2.x traps the docs and every guide omit - n8n refusing to boot with "Mismatching encryption keys" that "does not match the N8N_ENCRYPTION_KEY env var" after one bad first boot, "password authentication failed for user" from a literal unrendered template string, /healthz returning 200 while every API call answers 503 "Database is not ready!", "Workflow must be archived before it can be deleted", "To run the workflow manually, specify either a trigger to start from or a destination node", pg_dump "aborting because of server version mismatch", and WEBHOOK_URL deprecated in favour of N8N_WEBHOOK_URL. AWS additions cover Cloudflare 9109 "Invalid access token" then 10502 "Too many authentication failures", a backup-scope gate printing RISK on every run, and managed S3 buckets with one IAM key each (offline-validated only, not live). Use for self-hosted n8n on Postgres or Neon behind Cloudflare and Caddy, on Vultr or AWS. Full symptom index at the top of the body.
 ---
 
 # Single-node self-hosted n8n
@@ -33,6 +33,25 @@ with verbatim symptoms in `references/failure-catalogue.md`:
 - Cloudflare: `data.cloudflare_zone.zone ... 0 found` while
   `/user/tokens/verify` says `Invalid API Token`
 - an execution stuck in `running` forever, never reaching a terminal status
+- AWS: Cloudflare answers HTTP 403 `{"code":9109,"message":"Invalid access
+  token"}` on `/zones` for a token that worked the day before, then
+  `{"code":10502,"message":"Too many authentication failures. Please try
+  again later."}`: see
+  [the Cloudflare finding](references/aws.md#cloudflare-answers-9109-for-a-token-that-worked-the-day-before)
+- AWS: the backup-scope gate prints `RISK` on every run although a scoped
+  backup credential is exported in the shell, or the play refuses with
+  `no backup credential: supply COLORS_PAR_N8N_BACKUP_R2_* or record
+  r2-credential-sharing: shared-accepted`: see
+  [the credential that never reached the host](references/aws.md#the-backup-credential-never-reached-the-host-before-this-port)
+- AWS: `managed storage refuses to adopt an existing or inaccessible bucket`,
+  `managed storage credentials unavailable`, or `managed backend finalization
+  refused`: see [three buckets, two owners](references/aws.md#three-s3-buckets-two-owners)
+- AWS: an IPv6 CIDR refused in `n8n-ssh-sources`, or `Permission denied`
+  reading `/etc/n8n/secrets/` as `ubuntu`: see
+  [IPv4 only, ubuntu, ambient auth](references/aws.md#the-aws-adapter-is-ipv4-only-the-login-is-ubuntu-and-aws-auth-is-ambient)
+- AWS: `acceptance: could not read the generated role password over ssh`
+  after every host-side gate passed: see
+  [the acceptance step without sudo](references/aws.md#the-operator-side-acceptance-step-read-the-role-password-without-sudo)
 
 ## What this covers, and what paid for it
 
@@ -56,6 +75,30 @@ entry says which.
 
 **Most of it transfers to any self-hosted n8n on Postgres.** The Neon-specific
 parts are marked; the n8n 2.x parts apply whatever the database is.
+
+## AWS support has its own, narrower, evidence
+
+On 2026-09-11 the [`getcolors/n8n`](https://github.com/getcolors/n8n) package
+gained AWS support in all three colours (feature commit
+`2979693f3371b69cc26d93d413bfcea18b0089d5`, launchers pinned in `cf35a44`,
+then the sudo fix `be6a5ef` pinned in `91a483d`), modelled on the langfuse package's AWS port, and the public
+[`getcolors/n8n-aws`](https://github.com/getcolors/n8n-aws) deployment was
+created with that pin installed by the Skills CLI. Read
+[references/aws.md](references/aws.md) for the managed S3 lifecycle, the
+backup-credential finding, and what a live run must still prove.
+
+**Nothing on AWS was verified live.** What passed: the unit suites in three
+colours (green 46 tests, red 58, blue 68), golden renders for three fixtures,
+three-colour parity byte for byte, an offline `ansible-playbook
+--syntax-check`, and `./green build` and `./green create --dry-run` from the
+deployment checkout. No AWS resource has been created and no converge has
+run: every Cloudflare token on the build machine answered
+`{"code":9109,"message":"Invalid access token"}` that day, including the one
+that had created a record in the same zone the day before from the same
+address. Every AWS claim in this skill is therefore labelled
+**source-derived** (read from the code) or **offline-validated** (exercised
+by a test, a render or a dry run), never "verified live". The Vultr claims
+keep their 2026-09-01 provenance and are unchanged.
 
 ## The reference implementation, and why this skill ships no assets
 
@@ -278,3 +321,4 @@ anyway while writing the line. **Prose gets read once. A gate runs every time.**
 - `references/pins.md` — the verified-good version set and the rules that generated it
 - `references/failure-catalogue.md` — symptom-indexed, verbatim
 - `references/acceptance.md` — what each gate checks and why
+- `references/aws.md`: the AWS port, offline validation only, with source-derived findings and what a live run must still prove

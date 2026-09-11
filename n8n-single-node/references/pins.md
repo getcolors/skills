@@ -69,3 +69,47 @@ Claims decay when pins move. These have known retest conditions:
 - **The soak numbers** — 7950 executions / p95 75 ms / p99 80 ms are specific to
   `vhp-8c-16gb-amd` with NVMe and the declared workload mix. A different disk
   class invalidates them; `vc2-*` plans are SSD, not NVMe.
+
+## AWS port, offline validation
+
+Offline-validated on 2026-09-11; no host has run this set. Package feature
+commit `2979693f3371b69cc26d93d413bfcea18b0089d5`, launchers stamped by
+`cf35a44ba4c5dc86a5a4a6dd88b004a60b82286f`; the acceptance-step sudo fix
+`be6a5efbf39a9c61341139172b2924f1e78d3a47`, launchers stamped by `91a483d`;
+the `n8n-aws` deployment's `skills-lock.json` records `package-n8n-green`
+from that last publication. The
+image pins in the table above are unchanged by the port, and the AWS fixture
+carries the same five digests. See `aws.md` for what was and was not
+exercised.
+
+| Component | Pin or declared value |
+|---|---|
+| Green SDK | `3f33f5d4dcce1f8d97a11b6972e13eb3f0b37654` (the tofu launch-failure exit) |
+| colors-compute | `09ec539e75dc21c4dafb019eb8f9da276e695f6f` (managed S3 backend); the same SHA in `green/deps.edn`, `red/package.json` and `blue/pyproject.toml` |
+| Reused Neon package | `e19a213067d307b55d1b37a2e83cdc1a150b7d91` |
+| ONCE dependency | `a1fe1be7a427dd2e406ff7befd1c43a53e7c3618` |
+| AWS provider, storage stage | `hashicorp/aws` 6.31.0 |
+| AMI | `ami-025d99823a4caad37`, declared as Ubuntu 24.04 amd64. The same AMI booted as Ubuntu 24.04.4 LTS for the `neon-multi-node` skill on 2026-09-10; that is its evidence, not this skill's |
+| Instance | `t3.xlarge` (4 vCPU, 16 GiB), `us-east-1a` |
+| Root volume | `aws-root-volume-size-gb: 60`; the deployment's comments call it encrypted gp3, and what the adapter renders is `colors-compute`'s to prove |
+| VPC / subnet | `10.76.0.0/16` / `10.76.1.0/24` |
+| Host packages | not observed; the Vultr row above is the last observation |
+
+### Retest conditions for the AWS set
+
+- The first live converge is itself the retest of everything in `aws.md`;
+  until it runs, that file's claims stay source-derived.
+- Any `colors-compute` bump that touches the managed backend, the AWS adapter
+  or the finalization statuses (`destroyed`, `absent`, `skipped`): re-run a
+  delete and a second delete.
+- Any `hashicorp/aws` bump in the storage stage: re-run the post-apply plan.
+  The clickhouse sibling saw SSE readback drift at 6.31.0 with the SSE shape
+  this stage still carries.
+- A Neon pin bump: the `COLORS_PAR_NEON_R2_*` lookups in the upstream play are
+  the interface the managed pairs ride on; a renamed lookup silently empties
+  `/etc/neon/r2.env`, and the upstream play's own "empty R2 key id" check is
+  what would catch it.
+- The soak thresholds: the 2026-09-01 numbers are `vhp-8c-16gb-amd` NVMe
+  numbers and do not transfer to `t3.xlarge` on gp3. The AWS deployment
+  inherits the same thresholds, and the first live soak decides whether they
+  hold.
