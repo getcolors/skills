@@ -1,5 +1,5 @@
 {
-  "skill_name": "automq-vultr",
+  "skill_name": "automq-multi-node",
   "evals": [
     {
       "id": 0,
@@ -42,6 +42,42 @@
       "name": "cert-renewal-race-design",
       "prompt": "designing tls for a 3 broker kafka cluster where each broker advertises its own hostname. plan was to have every node run lego with dns-01 for its own name plus the shared bootstrap name, on a systemd timer. that seems simplest - no distribution step. anything wrong with it?",
       "expected_behaviour": "Flags that all three nodes issuing for the shared bootstrap name will race on the same _acme-challenge TXT record, each deleting the others' proof, and that this appears at renewal time months after the converge that created it. Also flags that it puts a zone-editing DNS credential on every publicly reachable broker. Recommends a single issuer publishing to shared storage the others pull from, and warns that restarts must be serialised by a distributed lease rather than each node's local quorum check, since combined broker+controller nodes restarting together destroy the majority."
+    },
+    {
+      "id": 7,
+      "name": "owned-buckets-are-not-external-adoptions",
+      "prompt": "The old AutoMQ context says adopt rather than create. My AWS deployment creates the backend, data and ops buckets with the SSH keypair. Should delete leave all three buckets behind to follow that rule?",
+      "expected_behaviour": "Distinguishes the original Vultr external R2 adoption policy from the verified AWS owned-resource lifecycle. Stops brokers before deleting application storage, destroys compute and its keypair, and finalizes the backend last including versioned state. Does not infer permission to delete data from a diagnosis request. Points to the AWS provenance and repeated-delete evidence."
+    },
+    {
+      "id": 8,
+      "name": "kafka-cli-inherits-broker-heap",
+      "prompt": "Our three AutoMQ brokers look healthy until acceptance runs kafka admin commands. Then a host reports an OOM kill. The broker heap is 2 GiB and I already allowed for that. What else should I inspect?",
+      "expected_behaviour": "Checks the Kafka CLI and healthcheck heap environment. Identifies the verified AWS failure where CLI processes inherited the server 2 GiB minimum heap and cites the package fix limiting those subprocesses to 256 MiB maximum. Keeps broker configuration separate and preserves serial rollout with readiness checks."
+    },
+    {
+      "id": 9,
+      "name": "gcs-state-key-is-workspace-object",
+      "prompt": "The GCS backend bucket was created, but AutoMQ bootstrap says no usable state. Our probe GETs the logical tfstate key directly using the old S3 endpoint code. Should I rerun create and let it allocate new nodes?",
+      "expected_behaviour": "Routes to the observed Google Cloud state-discovery trap. Checks native GCS transport and the actual default-workspace object at <logical-tfstate-key>/default.tfstate. Keeps the coordination journal at its direct key. Does not interpret a broken transport or wrong object path as evidence authorizing replacement resources."
+    },
+    {
+      "id": 10,
+      "name": "gcloud-bucket-missing-parser",
+      "prompt": "The Google compute stage already created three AutoMQ VMs. Now application bucket preflight stops on gcloud version 569.0.0 output containing lowercase not found: 404. The bucket does not appear in my project. What should I inspect before retrying?",
+      "expected_behaviour": "Identifies the observed absence-parser mismatch and checks the exact provider response. Treats the specific missing-bucket response as absence while preserving fail-closed behavior for auth errors and other failures. Explains compute success does not prove application storage was created, and retains live state during retry."
+    },
+    {
+      "id": 11,
+      "name": "google-security-archive-timeout",
+      "prompt": "AutoMQ on Google Cloud created its machines and buckets, but the base apt task has been stuck for several minutes. From one node security.ubuntu.com times out, while the us-central1.gce.archive.ubuntu.com noble-security InRelease returns 200. Can I remove the apt lock and retry?",
+      "expected_behaviour": "Diagnoses the observed security archive reachability issue, points to the optional automq-apt-security-mirror setting, and preserves Suites, Components and Signed-By. Checks whether remote apt workers remain active after stopping Ansible and waits for locks to become free naturally. Does not remove package-manager lock files or treat bucket creation as proof of Kafka acceptance."
+    },
+    {
+      "id": 12,
+      "name": "gcs-conditional-header-dialect",
+      "prompt": "My boto3 GCS request with x-goog-if-generation-match got ExcessHeaderValues: Requests cannot specify both x-amz and x-goog headers. I renamed it x-amz-if-generation-match and now both writers get 200. Is conditional ownership working?",
+      "expected_behaviour": "Recognizes mixed signing/header dialects and the verified silently ignored x-amz condition alias. Requires coherent x-goog headers before canonical signing and negative live tests: competitor create and stale generation replacement must fail while initial create and exact-generation replacement succeed. Does not treat HTTP 200 as proof of conditional semantics or isolated signing probes as full deployment acceptance."
     }
   ]
 }

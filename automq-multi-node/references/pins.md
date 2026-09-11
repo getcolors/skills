@@ -82,3 +82,37 @@ Stated so nothing here is mistaken for tested:
   completing on a timer.
 - **Recovery from real disk loss.** The refusal-to-reformat guard was reasoned
   through and its records exist, but no node's disk was actually destroyed.
+
+## AWS assessment, 2026-09-10
+
+The same AutoMQ image digest passed two live converges on AWS Ubuntu 24.04
+`t3.large` nodes in `us-east-1a`, with lifecycle-owned S3 buckets and IP SAN
+certificates signed by a deployment CA. The verified source was AutoMQ
+`e3beeaf08472fc3ab4e5121eca876e1f0bb6f8e9`, published by launcher commit
+`debb50b`, with colors-compute
+`87ec5661fc8807159419d90d437247f3503469c7`.
+
+See `aws.md` for the measured gates, deletion evidence and limits. Later
+launcher refreshes do not silently extend the original run's claims. The
+Vultr-specific OS and provider rows above remain the original 2026-09-01 pins.
+
+## Google Cloud assessment, 2026-09-11
+
+Two complete live converges, continuity, full deletion, repeated deletion and
+an independent final resource audit passed. The assessment used project
+`colors-508307`, three `e2-standard-2` machines in `us-central1-a`, and pinned
+image `projects/ubuntu-os-cloud/global/images/ubuntu-2404-noble-amd64-v20260906`.
+It retained the AutoMQ 1.7.4 digest above.
+
+Published colors-compute commit `d2c75d7` supplies the native GCS state backend
+and managed lifecycle in all three colors. The integrated GCS signer and
+package path were AutoMQ source `f0c34f1`, with launcher publication `f6877e0`.
+The live runs used Green. The second fetched published pins with no development
+`LIB_ROOT` overrides and preserved a separate 50-record continuity topic.
+
+See `gcloud.md` for evidence links, observed failure modes and limits. On a
+botocore or GCS signer change, rerun the positive and negative conditional-write
+probes. HTTP 200 without competitor refusal does not prove ownership safety.
+
+The published deployment and evidence are pinned at
+[automq-gcloud c5184d352fbb6467e179137f32ef6913368e8bc0](https://github.com/getcolors/automq-gcloud/commit/c5184d352fbb6467e179137f32ef6913368e8bc0).

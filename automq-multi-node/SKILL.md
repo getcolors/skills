@@ -1,9 +1,9 @@
 ---
-name: automq-vultr
-description: Everything a multi-node AutoMQ cluster needs that the docs and the single-node quick start will not tell you - two firewalls in front of every Vultr node (the provider group AND the ufw the image ships enabled, which passes ICMP while dropping inter-node TCP, so ping says the network is fine and the KRaft quorum never elects), SCRAM records that must be bootstrapped at genesis or the cluster can never authenticate anyone, and gates that prove a failover instead of assuming it. Use whenever AutoMQ, a Kafka cluster backed by object storage, KRaft on Vultr, or replication factor 1 comes up. Also on these symptoms - "waiting for the controller to acknowledge that we are caught up", endless "we still don't know the high water mark", perpetual CandidateState with a climbing epoch, "Could not find a 'KafkaServer' or 'external.KafkaServer' entry", "invalid credentials with SASL mechanism SCRAM-SHA-512" from every principal, "error creating VPC 2.0". Full symptom index in the body.
+name: automq-multi-node
+description: Diagnose multi-node AutoMQ deployments backed by object storage. Use for KRaft stuck in CandidateState or waiting for the high water mark, SCRAM-SHA-512 invalid credentials for every principal, missing KafkaServer JAAS entries, gates that pass only once, and bucket or SSH key ownership failures. Carries verified Vultr, AWS and Google Cloud context, listener and genesis contracts, and targeted failover acceptance gates.
 ---
 
-# Multi-node AutoMQ on Vultr
+# Multi-node AutoMQ
 
 ## Symptom index
 
@@ -29,6 +29,12 @@ Each has a full entry, with verbatim text, in
 - an ssh key reported as "not in this deployment's state" ninety seconds after
   this deployment created it
 - a gate that passed on the first converge and fails on every one after
+- GCS state discovery failing after the state bucket was created, or gcloud
+  bucket preflight rejecting `not found: 404.`. See `references/gcloud.md`.
+- GCS returns `ExcessHeaderValues`, or both competing conditional creates
+  succeed. See `references/gcloud.md`.
+- base apt installation stalls while the global Ubuntu security archive times
+  out but the regional Google archive responds. See `references/gcloud.md`.
 
 ## What this stack is
 
@@ -38,17 +44,26 @@ bucket. Three nodes run both KRaft roles (`broker,controller`); the controller
 quorum and inter-broker replication stay on a private network; the public
 endpoint is `SASL_SSL` with SCRAM and an ACL authorizer.
 
-The tested implementation is `github.com/getcolors/automq`, with
-`github.com/getcolors/automq-vultr` as its deployment. This skill carries no
-copies of their files — it explains what the errors mean and why the
-configuration is what it is.
+The tested implementation is `github.com/getcolors/automq`. The original
+Vultr deployment is `github.com/getcolors/automq-vultr`; the AWS lifecycle
+assessment is `github.com/getcolors/automq-aws`. The Google Cloud deployment
+is `github.com/getcolors/automq-gcloud`. Claims come from those live
+builds at the pins in `references/pins.md`, except where marked unverified.
+Provider-specific observations retain their original scope. This skill carries
+no copies of the implementation's files.
+
+For Google Cloud provisioning, GCS signing and bucket lifecycle evidence, read
+`references/gcloud.md`. Two complete live converges, data continuity, deletion and an independent
+resource audit passed. For AWS lifecycle-owned buckets and
+IP-address certificates, read `references/aws.md`. The Vultr firewall and Cloudflare R2 observations below
+are evidence for that deployment, not defaults for every provider.
 
 ## Replication factor 1 is the architecture
 
 Every topic, internal ones included, is RF=1. That is upstream's shipped
 default and it is not a misconfiguration: the bytes are in object storage
 before the ack. Three nodes buy the controller quorum, partition failover and
-throughput — not copies.
+throughput.
 
 Two things follow, and both are load-bearing:
 
@@ -89,12 +104,13 @@ Then check `ufw status` on the host *before* the provider's console.
 The failure that cost the most: a converge claimed a "genesis" marker and then
 failed during the format. Every later run read "already initialized" and
 formatted its nodes **without** SCRAM bootstrap records. The result is a
-cluster that can never authenticate anyone — and that cannot be repaired in
+cluster that can never authenticate anyone and cannot be repaired in
 place, because `kafka-configs --bootstrap-controller` answers
 `UnsupportedEndpointTypeException`.
 
-Derive "has this been initialized?" from **evidence that the work completed** —
-a per-node format-complete record — never from a marker written before it. The
+Derive "has this been initialized?" from a per-node format-complete record,
+which is evidence that the work completed. A marker written before the work
+cannot prove completion. The
 same principle makes the per-node record two-phase (`intent`, then `complete`):
 without the split, a converge killed mid-format is indistinguishable from disk
 loss on the next run, and those demand opposite responses.
@@ -113,8 +129,8 @@ same string, so nothing distinguishes them.
 
 - **Compute output**: ownership of the generated ssh key is read from
   `params.ssh_key_id`. A multi-node stack naturally emits `params` as a *list*
-  of nodes, which has nowhere to put a key id — so a key created ninety seconds
-  earlier is reported as foreign. Emit an object: `{ ssh_key_id, nodes: [...] }`.
+  of nodes, which has nowhere to put a key id. A key created ninety seconds
+  earlier is then reported as foreign. Emit an object: `{ ssh_key_id, nodes: [...] }`.
 - **`~/.ssh/config`**: one managed block, marked with the profile, holds a
   stanza per node. An ownership check that derives the marker from the stanza
   it is searching for will read the block as somebody else's.
@@ -124,18 +140,24 @@ used for two purposes at once.
 
 ## Object storage belongs to exactly one cluster
 
-AutoMQ supports **no configurable path prefix** — keys are
+AutoMQ supports **no configurable path prefix**. Keys are
 `<hash>/_kafka_<clusterId>/<id>` at the bucket root. It therefore cannot be
 confined to a prefix inside a shared bucket, and a bucket must belong to one
 cluster outright.
 
-Adopt rather than create: prove emptiness by paginating the *whole* bucket (a
-prefix check misses exactly the hash-prefixed keys that matter), claim
-ownership with a conditional create, and carry one transaction id across both
-buckets so a half-adopted pair resumes and a mismatched one fails. Cloudflare
-R2 honours `If-None-Match: *`; the distribution's boto3 may not know the
-parameter, which is a client limitation, not a protocol one — see
-failure-catalogue 8.
+The original Vultr deployment adopted external R2 buckets. For adoption, prove
+emptiness by paginating the whole bucket, claim ownership with a conditional
+create, and carry one transaction id across both buckets. A half-adopted pair
+must resume; a mismatched pair must fail. Cloudflare R2 honours
+`If-None-Match: *`; older boto3 versions reject the parameter before sending a
+request. See failure-catalogue 8.
+
+The AWS and Google Cloud deployments create state, data and ops buckets as lifecycle resources
+beside the SSH keypair. Their delete paths remove application storage after
+stopping the brokers and remove the state bucket last. Do not apply the
+external-bucket adoption policy to lifecycle-owned storage. See
+`references/aws.md` and `references/gcloud.md` for the verified ownership and
+deletion boundaries.
 
 The cluster id is also the object namespace, so it is desired state, not a
 runtime accident: changing it orphans the data rather than renaming it.
@@ -144,14 +166,14 @@ runtime accident: changing it orphans the data rather than renaming it.
 
 Every broker advertises its own name, so all of them must be in the
 certificate. If each node issues its own, they race on the shared
-`_acme-challenge` record for the bootstrap name — each deleting the others'
-proof — and every node ends up holding a zone-editing DNS credential.
+`_acme-challenge` record for the bootstrap name and delete one another's
+proof. Every node also holds a zone-editing DNS credential.
 
 One node issues and publishes to the ops bucket; the others pull. Restarts are
 ordered by a lease in object storage, **not** by each node's local quorum
 check: a local check cannot order actors it cannot see, and these are combined
 broker+controller nodes where a simultaneous restart destroys the majority.
-The renewal path runs months later, when no Ansible control connection exists —
+The renewal path runs months later, when no Ansible control connection exists,
 so distribution must not depend on one.
 
 lego 5.x moved its flags under the subcommand; see failure-catalogue 7.
@@ -164,7 +186,7 @@ lego 5.x moved its flags under the subcommand; see failure-catalogue 7.
   broker you are about to kill and produce keyed records to exactly that
   partition. Unkeyed records over six partitions can pass without ever touching
   it. "Rejoined" is re-registration plus bounded lag plus a matching
-  high-watermark — a static voter stays listed the whole time it is dead.
+  high-watermark. A static voter stays listed the whole time it is dead.
 - **Gates must pass twice.** They run on every converge against a cluster that
   keeps its data, so one counting absolute totals passes the first time and
   fails forever after, against a healthy cluster. The first converge is the one
@@ -172,7 +194,10 @@ lego 5.x moved its flags under the subcommand; see failure-catalogue 7.
 
 ## References
 
-- `references/failure-catalogue.md` — symptom-indexed, verbatim error text
-- `references/contract.md` — listeners, JAAS, SCRAM at genesis, storage
-- `references/pins.md` — the version set, how it was chosen, what is unverified
-- `references/acceptance.md` — what each gate defends against
+- `references/failure-catalogue.md`. symptom-indexed, verbatim error text
+- `references/contract.md`. listeners, JAAS, SCRAM at genesis, storage
+- `references/pins.md`. the version set, how it was chosen, what is unverified
+- `references/acceptance.md`. what each gate defends against
+
+- `references/aws.md`, AWS lifecycle, private CA and verification scope
+- `references/gcloud.md`, Google Cloud provisioning observations and pending gates
