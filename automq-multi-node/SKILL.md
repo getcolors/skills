@@ -200,4 +200,4 @@ lego 5.x moved its flags under the subcommand; see failure-catalogue 7.
 - `references/acceptance.md`. what each gate defends against
 
 - `references/aws.md`, AWS lifecycle, private CA and verification scope
-- `references/gcloud.md`, Google Cloud provisioning observations and pending gates
+- `references/gcloud.md`, Google Cloud failure modes and verified acceptance and cleanup
