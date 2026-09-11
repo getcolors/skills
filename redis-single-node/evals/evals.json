@@ -56,6 +56,20 @@
         "Attributes the rclone 403 to the pre-upload bucket check and prescribes no_check_bucket (and copyto instead of rcat)",
         "Mentions rehearsing a restore, with the scratch instance run with AOF off"
       ]
+    },
+    {
+      "id": 4,
+      "name": "password-permission-denied-on-aws",
+      "prompt": "we moved our single-node redis (docker compose, requirepass generated on the host into /etc/redis/secrets/password, 0600 root) from a vultr box to an ec2 ubuntu 24.04 instance. same ansible play, converge is green, redis is up. but our post-deploy check that does `REDISCLI_AUTH=$(ssh redis-prod cat /etc/redis/secrets/password) redis-cli -p 6379 PING` now fails with 'Permission denied' from ssh and then redis-cli says NOAUTH. our little `ssh redis-prod redis-status` helper also dies reading /etc/colors/backup-r2.env and 'permission denied while trying to connect to the Docker daemon socket'. on vultr this all worked for months. did the play not set the file modes on this image? should i just chmod 644 the password file?",
+      "expected_output": "Should identify that the AWS Ubuntu AMI logs in as `ubuntu` while the Vultr image logs in as root, so every read that assumed root is now refused; the file modes are correct and must not be loosened. Prescribe reading with passwordless sudo: `ssh redis-prod sudo -n cat /etc/redis/secrets/password` (or `cat … 2>/dev/null || sudo -n cat …` so the same command works on root-login images), and make the helper re-exec itself under `sudo -n` when `id -u` is not 0 rather than adding the user to the docker group or chmodding secrets. Should note that NOAUTH after the failed read is redis-cli being handed an empty password, not a second problem, and that a gate must fail on an empty read rather than proceed. Should mention that whichever check reads only 0644 files (a monitor JSON) keeps working without sudo, which is why only some checks broke.",
+      "files": [],
+      "assertions": [
+        "Attributes the failure to the AMI logging in as ubuntu instead of root, not to wrong file modes",
+        "Refuses the chmod 644 on the password file (and does not suggest adding ubuntu to the docker group as the fix)",
+        "Prescribes sudo -n (passwordless sudo) for the remote read, ideally in a form that also works on root-login images",
+        "Recommends the helper re-execute itself under sudo when not root",
+        "Explains the NOAUTH as a consequence of the empty password read rather than a separate Redis problem"
+      ]
     }
   ]
 }
