@@ -165,5 +165,6 @@ and is run without the pair. The converge play still receives it.
 - A Docker that stops publishing on a specific host address: re-run the
   listener gate and the public-port probe before trusting the exposure
   claim.
-- The red and blue launchers on AWS: their first live converge is the
-  retest of everything the green run proved for them.
+- The red and blue launchers: their live AWS lifecycles passed at pin
+  `ffb0777` on 2026-09-11 (create x2, describe, rehearse, delete x2 each,
+  no fixes needed); a pin bump retests all three colours, not green alone.

@@ -107,6 +107,7 @@ monitor file is 0644, so `describe` needs no sudo on the `ubuntu` login;
 - **The rclone flags on native S3.** `no_check_bucket` and `no_head` were
   kept when the provider switched to `AWS`; the build never ran without
   them, so whether S3 needs them is unknown.
-- **The red and blue launchers on AWS.** They render the same trees and
-  pass their suites; as of this update their live AWS verification is
-  pending.
+- **Red and blue beyond one pin.** Both launchers passed the same
+  lifecycle and audits as green on 2026-09-11 at pin `ffb0777`; a later
+  pin needs its own run in each colour, since the ports share templates
+  but not code.

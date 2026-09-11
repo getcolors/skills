@@ -78,12 +78,16 @@ them.
 
 The companion package is now tri-colour (green, red, blue), and
 `scripts/parity.sh` enforces that the three render every fixture byte for
-byte the same. The AWS build ran the green launcher end to end. The red
-and blue ports render the same trees and pass their own suites, and the
-fourth fix was landed in all three colours with a test each; their live
-verification on AWS is pending as of this update. The red and blue payloads
-have been published since `daa6811` and are installed in the `redis-aws`
-deployment, but had not been live-run from it when this was written.
+byte the same. The AWS build ran the green launcher end to end and then,
+at the same pin (`ffb0777`), the red and blue launchers each through the
+whole lifecycle from the `redis-aws` deployment on 2026-09-11: two
+creates, describe, rehearse, describe, the refused delete, the authorized
+delete and the repeat delete, with the same independent AWS CLI audits
+(instances `i-0b35043221dc5d750` red and `i-0efea601df0eabf8f` blue,
+recovery markers `set=20260911T044548Z` and `set=20260911T050241Z`). No
+port bug surfaced; the three rendered `.colors/redis-aws/` trees were
+diffed empty before the runs. The evidence lives under
+`evidence/red-blue/` in that deployment.
 
 ## The reference implementation, and why this skill ships no assets
 
