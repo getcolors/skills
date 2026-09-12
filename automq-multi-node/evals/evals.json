@@ -132,6 +132,36 @@
       "name": "oci-retired-held-journal-resume",
       "prompt": "The AutoMQ compute journal is retired, its identity is right, and backend finalization was interrupted while holding its lease. Normal delete now says compute state unavailable; legacy monolithic state requires explicit migration. Is this actually old state that I need to migrate?",
       "expected_behaviour": "Identifies the verified classification-order defect. Requires valid journal schema and matching deployment identity before recognizing retired status, then routes to guarded backend finalization even if its old finalizer lease is held. Keeps active held journals excluded, and does not infer legacy state from the generic error or manually clear ownership evidence."
+    },
+    {
+      "id": 22,
+      "name": "oci-get-readiness-after-list-success",
+      "prompt": "Our new OCI AutoMQ account passes ListObjects and the ops conditional-write gate, then adopt gets SignatureDoesNotMatch reading a colors-ready marker. Does that mean the marker is missing or that I should generate a new credential?",
+      "expected_behaviour": "Identifies operation-specific readiness observed on September 12. Distinguishes authenticated NoSuchKey from a signature failure, requires positive exact-byte GET and authenticated missing-object probes in both application buckets, preserves existing generated credentials and secrets, and retries a bounded complete readiness check. Does not confuse VM allocation or an ops-only precondition pass with broker acceptance."
+    },
+    {
+      "id": 23,
+      "name": "oci-inactive-ufw-raw-reject",
+      "prompt": "All three OCI A1 hosts say UFW inactive. SSH and ping work, but iptables-save shows a final INPUT REJECT after the SSH allow rule. Should I flush iptables before starting AutoMQ?",
+      "expected_behaviour": "Recognizes the observed OCI raw host filter despite inactive UFW. Requires scoped Kafka client/private controller/inter-broker accepts before the terminal rejection, preserves OCI InstanceServices link-local rules, and verifies persistence and real TCP reachability. Does not flush provider rules or infer cluster acceptance from firewall configuration."
+    },
+    {
+      "id": 24,
+      "name": "oci-probe-leftovers-block-adoption",
+      "prompt": "AutoMQ adoption refuses a nonempty OCI ops bucket after readiness failed twice. The only objects appear to be test keys under preconditions. Can I empty the bucket and retry?",
+      "expected_behaviour": "Routes to the observed readiness cleanup failure. Requires exact key and synthetic-body verification before removing only recorded probe objects, preserves ownership/genesis markers and unrelated data, and uses a persistent exact-key ledger so failed cleanup retries cannot leave untracked probes."
+    },
+    {
+      "id": 25,
+      "name": "oci-firewall-platform-lost-after-reboot",
+      "prompt": "After reboot our OCI AutoMQ firewall chain returned and the broker is healthy, but INPUT/FORWARD rejections and InstanceServices OUTPUT rules disappeared. Apt logs say installing UFW removed iptables-persistent and netfilter-persistent. Did the firewall test pass?",
+      "expected_behaviour": "Recognizes the verified package conflict and distinguishes application health from firewall persistence. Preserves/restores native platform persistence, avoids installing conflicting UFW on the native path, compares both owned and platform rules after a real reboot, and keeps the failed audit historical until a corrected audit passes."
+    },
+    {
+      "id": 26,
+      "name": "literal-ip-tls-and-graceful-stop-gates",
+      "prompt": "Our AutoMQ acceptance skips certificate checks because getent cannot reverse-resolve broker IPs. It also reports zero-second failover, timed after docker stop returns. Can I report TLS and abrupt-crash recovery as passing?",
+      "expected_behaviour": "Requires direct CA and IP-SAN verification for literal IPs without a PTR prerequisite. Explains that a skipped certificate check is not a pass and post-graceful-stop timing is not abrupt-crash evidence. Requires pre-fault timing, abrupt stop, live leadership targeting and stopped-victim guards before reporting crash recovery."
     }
   ]
 }

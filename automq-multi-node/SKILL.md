@@ -1,6 +1,6 @@
 ---
 name: automq-multi-node
-description: Diagnose multi-node AutoMQ deployments backed by object storage. Use for KRaft stuck in CandidateState or waiting for the high water mark, SCRAM-SHA-512 invalid credentials for every principal, missing KafkaServer JAAS entries, gates that pass only once, and bucket or SSH key ownership failures. Carries verified Vultr, AWS and Google Cloud context plus OCI conditional-write, identity and VM allocation failures, listener and genesis contracts, and targeted failover acceptance gates.
+description: Diagnose multi-node AutoMQ deployments backed by object storage. Use for KRaft stuck in CandidateState or waiting for the high water mark, SCRAM-SHA-512 invalid credentials for every principal, missing KafkaServer JAAS entries, gates that pass only once, and bucket or SSH key ownership failures. Carries verified Vultr, AWS, Google Cloud and OCI context, including conditional-write, identity and VM allocation failures, listener and genesis contracts, and targeted failover acceptance gates.
 ---
 
 # Multi-node AutoMQ
@@ -61,6 +61,18 @@ Each has a full entry, with verbatim text, in
   monolithic state requires explicit migration` despite a retired journal.
   See `references/oci.md`.
 
+- OCI `GetObject` returns `SignatureDoesNotMatch` after a list or ops
+  precondition gate passes. See `references/oci-2026-09-12.md`.
+- OCI hosts report inactive UFW while raw INPUT rules reject every new
+  Kafka connection. See `references/oci-2026-09-12.md`.
+
+- OCI platform firewall rules disappear after reboot, or repeated applies
+  append duplicate NTP rules. See `references/oci-2026-09-12.md`.
+- Public acceptance cannot resolve a literal broker IP and skips TLS checks.
+  See `references/oci-2026-09-12.md`.
+- Adoption refuses an ops bucket containing failed readiness-probe objects.
+  See `references/oci-2026-09-12.md`.
+
 ## What this stack is
 
 AutoMQ speaks the Apache Kafka wire protocol but replaces replicated local
@@ -83,8 +95,11 @@ For Google Cloud provisioning, GCS signing and bucket lifecycle evidence, read
 resource audit passed. For AWS lifecycle-owned buckets and
 IP-address certificates, read `references/aws.md`. For OCI scoped storage probes, failed VM allocation and verified partial
 deployment cleanup, read
-`references/oci.md`. No OCI broker launched, so Kafka acceptance and repeated
-full convergence remain untested. The Vultr firewall and Cloudflare R2 observations below
+`references/oci.md`. That September 11 account did not launch a broker.
+The separate September 12 account passed three complete converges, including
+two on one source pin and one after a firewall idempotency correction. Read
+`references/oci-2026-09-12.md` for measured abrupt failover, reboot persistence
+and continuity. The running cluster was retained, so its deletion is untested. The Vultr firewall and Cloudflare R2 observations below
 are evidence for that deployment, not defaults for every provider.
 
 ## Replication factor 1 is the architecture
@@ -232,3 +247,5 @@ lego 5.x moved its flags under the subcommand; see failure-catalogue 7.
 - `references/gcloud.md`, Google Cloud failure modes and verified acceptance and cleanup
 
 - `references/oci.md`, OCI conditional-write failures and credential propagation
+
+- `references/oci-2026-09-12.md`, A1 cluster acceptance, reboot persistence and bootstrap failures

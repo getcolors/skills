@@ -116,3 +116,20 @@ conditional writes, lease exclusion and state-bucket denial with its scoped
 application identity. A second successful storage create had a no-change
 plan. These are separate storage claims, recorded in `oci.md`; synthetic
 objects are not evidence of AutoMQ object creation or acknowledged records.
+
+
+## OCI A1 assessment scope, 2026-09-12
+
+A different OCI account passed three complete converges with nine host and 16
+public gates. The first two used source `5aac5a3`; the third used `6b76c01`
+after a firewall idempotency correction. Targeted abrupt-stop recovery took
+11, 11 and 10 seconds, with all 100 acknowledged records preserved each time.
+Timers began before the fault, and the gate checked that the victim remained
+stopped. These are abrupt broker-stop observations, not disk-loss or AZ-loss
+tests. The consumer-offset placement limitation above still applies.
+
+The independent continuity topic survived reboots and repeated convergence.
+A repaired real reboot preserved owned and platform firewall rules. The
+cluster remains running with destruction protection; September 11 cleanup
+evidence concerns a different account's partial deployment. See
+`oci-2026-09-12.md` for exact pins, evidence and scope.

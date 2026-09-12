@@ -159,3 +159,38 @@ and repeated deletion exited 0 without development overrides. The final native
 audits confirmed owned-resource absence and preservation of the borrowed
 network. These checks establish partial-deployment cleanup, not OCI Kafka
 acceptance.
+
+## OCI A1 assessment, 2026-09-12
+
+A different OCI account, namespace `fryovegrk8e7`, ran three
+`VM.Standard.A1.Flex` broker/controllers with 1 OCPU and 8 GiB each across
+Frankfurt's three availability domains. It retained the AutoMQ 1.7.4 image
+index above and Ubuntu `Canonical-Ubuntu-24.04-aarch64-2026.08.25-0`.
+
+Two complete converges passed on AutoMQ source
+`5aac5a3dfc689071156f5e67c5f1bb7eaec5ca50`, published by launcher commit
+`c3492fd3627091ad3c07a321061689454534fced`. A final complete converge passed
+after the firewall idempotency correction on source
+`6b76c01e730c79cfef3e0f9baee68f85b29bd604`, published by
+`379608efb87f53a67e5d556c42efd4a660a531c3`. Both used colors-compute
+`58ac766d17cc1b174992986c1088d9d7045e13b5`. These successful full runs used
+published dependencies without local source overrides. Intermediate diagnosis
+and repair used development code and exact-object or exact-rule cleanup as
+recorded in the report.
+
+Each full run passed nine host and 16 public gates. The final source therefore
+has one complete pass, alongside two complete passes on the preceding source;
+do not report two passes on the final pin. Separate firewall calls verified
+idempotency of the final helper on all three hosts. A repaired real reboot
+preserved platform and owned rules, and an independent continuity topic
+survived the reboots and repeated converges.
+
+The [deployment and dated evidence](https://github.com/getcolors/automq-oci/commit/ee2789daa1738b33563488b9294940179234ea09)
+are pinned at `ee2789daa1738b33563488b9294940179234ea09`. Read
+`oci-2026-09-12.md` for exact observations and fault timing. The cluster was
+retained with its destruction guard enabled. No running-cluster deletion,
+disk-loss, AZ-loss, transactional-workload or sustained-capacity claim follows
+from this assessment. The September 11 account's cleanup remains historical.
+
+Package documentation publication `3da40c6281ae4eba3ab21a80ae9c21c3ebed8cb3`
+links this evidence; its launchers still use source `6b76c01`.
