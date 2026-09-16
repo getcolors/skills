@@ -1,0 +1,89 @@
+{
+  "skill_name": "redis-operator-kubernetes",
+  "evals": [
+    {
+      "id": 0,
+      "name": "check-fails-reconciling-on-healthy-resource",
+      "prompt": "our redis operator on DOKS is driving me nuts. `./green check` keeps failing with 'RedisDeployment is not Ready at its current generation: phase=Reconciling reason=Reconciling generation=1 observed=1'. but the droplet is fine, redis answers, and the controller log says 'observe exists=true matches=true ready=true reason=converged' over and over. reconcile interval is 30s. i ran check twice, 20 seconds apart, same thing both times. is the controller stuck reconciling?",
+      "expected_output": "Should explain that the controller is not stuck: green.kubernetes publishes Reconciling at the start of every due pass and Ready only after the pass's second observation (a DigitalOcean GET, an R2 state read and an SSH PING, twice), and writes status twice per pass, so under a 30s interval a single read of status.phase can land inside the Reconciling window; the log lines are exactly what a healthy pass prints. The fix is to poll, not read once: wait (5s, up to 180s) until phase=Ready with the Ready condition True and observedGeneration equal to metadata.generation, treating Reconciling and an unobserved generation as transient and only Invalid/Blocked/suspension/deletion as fatal. Should mention this is what the package's check does since commit 1de4b5c, so updating the launcher pin fixes it, and that a longer reconcile interval widens the Ready window but does not remove the trap.",
+      "files": [],
+      "assertions": [
+        "States that Reconciling is a transient phase the controller publishes at the start of every pass, not evidence of a stuck controller",
+        "Explains that a single read of status.phase proves nothing and prescribes polling until Ready at the current generation",
+        "Mentions observedGeneration equal to metadata.generation as part of the Ready predicate",
+        "Attributes the window to the observe pass (DigitalOcean API, R2 state, SSH PING) and/or the two status writes per pass",
+        "Does NOT tell the user to restart the controller or delete the resource to unstick it"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "patch-422-server-rejected-our-request",
+      "prompt": "trying to tear down our RedisDeployment. `COLORS_PAR_COMPUTE_PREVENT_DESTROY=false ./green delete` dies immediately at the destroy step with 'kubectl patch redisdeployments.colors.getcolors.ai failed (exit 1): The request is invalid: the server rejected our request due to an error in our request'. nobody else is editing the resource, i checked. the patch is just setting deletionPolicy to Destroy. what's invalid about it?",
+      "expected_output": "Should identify the 422 as the apiserver rejecting the JSON-patch `test` op on metadata.resourceVersion, not the deletionPolicy value: the verb's snapshot went stale because the controller writes status twice per reconcile pass and every status write moves the resourceVersion, so the patch lands against a version that no longer exists even with no human editing. Should say the right handling is to re-read the resource and re-issue the patch only when spec, deletionTimestamp and uid are unchanged (bounded retries), fail as a concurrent edit when the spec differs, and not retry a 422 on an unmoved resourceVersion; this is what patch-resource! does since redis-operator commit 7723970, so refresh the launcher pin and rerun. Should warn against removing the test op or patching with --type=merge and no guard, which would overwrite a concurrent edit silently.",
+      "files": [],
+      "assertions": [
+        "Identifies the failed resourceVersion `test` op (HTTP 422) as the cause rather than the deletionPolicy value",
+        "Explains that the controller's status writes move the resourceVersion, so the snapshot is stale without any concurrent human edit",
+        "Prescribes re-reading and retrying only when spec, deletionTimestamp and uid are unchanged, with a bound",
+        "Mentions that the packaged fix exists (commit 7723970 or 'update the launcher pin')",
+        "Does NOT recommend dropping the resourceVersion guard or an unguarded merge patch as the fix"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "exec-into-restarting-controller-zlib",
+      "prompt": "we roll our green kubernetes controller with scale to 0 then 1. our restart test waited for the pod to be Running and for status.lastReconcileTime to be newer than before, then exec'd `bb -m colors.probe ... health` into the new pod and got 'Clojure tools not yet in expected location: /root/.deps.clj/1.12.4.1618/ClojureTools/clojure-tools-1.12.4.1618.jar' then 'Unzipping ... clojure-tools.zip' and 'java.io.EOFException: Unexpected end of ZLIB input stream', exit 1. the pod is fine a minute later. is our image broken?",
+      "expected_output": "Should explain two stacked problems. First, the exec raced the controller's own first-start dependency download: with the caches (/root/.gitlibs, /root/.m2, /root/.deps.clj, /app/.cpcache) not on a persistent volume the new pod downloads clojure-tools on every start, the exec'd bb started a second download of the same archive into the same path, and both read a truncated zip; rollout status said complete because the Deployment has no readiness probe. Second, the 'lastReconcileTime newer than before' proof is wrong because the old controller publishes status while draining, so the accepted write came from the old pod. Fixes: gate every exec on the new pod's own log (since its status.startTime) carrying the controller's 'running' line, accept only a lastReconcileTime later than that pod's startTime with a different pod UID, and mount the dependency caches as PVC subPaths so restarts resolve nothing. Should say the image is not broken.",
+      "files": [],
+      "assertions": [
+        "Identifies the exec racing the controller's first-start dependency download as the cause of the truncated ZLIB stream",
+        "Explains that a lastReconcileTime merely later than the pre-restart value can come from the old controller draining",
+        "Prescribes proving the restart by a reconcile later than the new pod's startTime (and a changed pod UID)",
+        "Recommends gating execs on the new pod's log line and/or putting the dependency caches on the PVC",
+        "Does NOT conclude that the image is corrupt or needs rebuilding"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "drill-recovered-but-data-gone",
+      "prompt": "ran the self-healing drill on our redis operator deployment (deleted the droplet through the DO API, waited). it passed - new droplet, same RedisDeployment uid, same generation, took about 5 minutes, health probe green. but all the keys our app had written before the drill are gone, and even the marker the drill itself wrote first didn't come back. the evidence file literally says priorMarkerSurvived: false and passed: true. how is that a pass? we have backups in r2 every 6 hours, shouldn't the controller have restored the latest one?",
+      "expected_output": "Should state plainly that the drill proves service recovery, not data recovery, and that its evidence declares expectedDataRecovery: false before the delete: the controller reruns the Redis package's create workflow, which provisions a fresh Droplet with a new generated password and an empty data volume; automatic restore is not implemented and the companion README says so. The backup sets in R2 survive and are restorable by hand (the rehearse verb proves a set restores into a scratch container, not onto the live host). Honest RPO after Droplet loss is everything since the newest completed backup set, up to the six-hour schedule. Should recommend either accepting that and writing it down, or building an explicit restore step, and should not suggest the pass is a bug or that the marker was supposed to survive.",
+      "files": [],
+      "assertions": [
+        "States that the drill's pass means service recovery and that data recovery is explicitly out of scope (expectedDataRecovery: false)",
+        "Explains that the replacement is a fresh Droplet with an empty data volume and a new password",
+        "States that automatic restore from the R2 backup sets is not implemented and must be done by hand",
+        "Gives the RPO as everything since the newest completed backup set (the backup schedule)",
+        "Does NOT claim the lost marker or keys indicate a bug in the drill or the controller"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "first-ansible-attempt-fails-on-fresh-droplet",
+      "prompt": "first create of a RedisDeployment through our DOKS-hosted controller. kubectl logs shows 'converge start', then two minutes later 'converge outcome=failed step=:redis/ansible exit=2', then 10 seconds after that 'observe ... reason=unhealthy provider-id=600954837' and 'converge start' again, and about two minutes after that 'converge outcome=converged'. the resource went Failed briefly and is now Ready. our CI gate saw the Failed phase and marked the deploy red. what went wrong with ansible and should the gate be blocking on this?",
+      "expected_output": "Should say this pattern is the observed normal on this stack: on three of four creates across two verified builds the first Ansible play on a brand-new Droplet exited 2 and the controller's automatic retry (Failed/ExecutionFailed with a 1s backoff, then observe unhealthy, then converge again) succeeded, and the cause has NOT been determined - the earlier build discarded the play output by design and the later one had retention armed but the failure did not recur. Should point at the retained failure logs: since commit 1de4b5c the controller writes masked logs to /data/work/<profile>/failures/<timestamp>-<step>.log, `./green check` prints 'failures retained: N', and the file is read with kubectl exec ... cat. Should tell the user the gate is wrong to fail on the first Failed pass: the package's own create wait tolerates Failed and waits for Ready at the current generation. Should not invent a cause (e.g. unattended-upgrades) as fact, though it may mention it as an unconfirmed candidate.",
+      "files": [],
+      "assertions": [
+        "States that a first-attempt Ansible failure followed by a converged retry was observed on 3 of 4 creates and that the root cause is not determined",
+        "Points the user at the retained failure logs under /data/work/<profile>/failures and the 'failures retained' line from check",
+        "Advises that a gate must tolerate Failed passes during a create and wait for Ready at the current generation",
+        "Explains the controller's retry mechanics (Failed with backoff, observe unhealthy, converge again)",
+        "Does NOT assert a specific root cause as established fact"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "doks-delete-leftovers",
+      "prompt": "tearing down our dev DOKS cluster after removing the redis operator. `./green delete` on the doks deployment destroyed the cluster and the registry and then crashed with 'java.nio.file.DirectoryNotEmptyException: .../.colors/doks-dev/registry/push'. and when i list the account with doctl right after, the worker droplet and two firewalls called k8s-<cluster-id>-worker and k8s-public-access-<cluster-id> are still there. did the delete actually fail? do i need to delete those by hand?",
+      "expected_output": "Should separate the two observations. The exception is the local cleanup step, not the cloud delete: the operator's image build ran docker buildx as root with DOCKER_CONFIG pointing at the deployment's registry/push directory and left a root-owned buildx/ subtree there, which the unprivileged cleanup cannot remove; the fix is to remove that tree (sudo rm -rf) and rerun delete, which completes every stage, and newer image.sh builds from a private temp config directory. The lingering worker Droplet and k8s-* firewalls are DigitalOcean removing them asynchronously after the cluster resource is gone - observed about four minutes on the verified build - so list the account again after the window rather than deleting them by hand. Nothing billable was affected by the exception.",
+      "files": [],
+      "assertions": [
+        "Attributes the DirectoryNotEmptyException to a root-owned buildx directory left by the image build under the push config directory, i.e. a local cleanup failure",
+        "States that the cluster and registry deletion had already succeeded and nothing billable was affected",
+        "Explains that the worker Droplet and k8s-<cluster-id> firewalls are removed asynchronously by DigitalOcean minutes after the cluster is gone",
+        "Advises re-listing the account after the window (and rerunning the delete after clearing the directory)",
+        "Does NOT tell the user to delete the k8s-* firewalls or the worker by hand as the first step"
+      ]
+    }
+  ]
+}
