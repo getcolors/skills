@@ -104,6 +104,8 @@ Recipe rules:
   marketing description.
 - Keywords carry the symptoms people will actually search — including any
   high-signal error strings trimmed from the description for the spec cap.
+- Never add `shape`: the catalog derives a Context Skill's shape from its
+  companion package's recipe, so the same shape filter reaches both.
 - Set `companion:` to the tested implementation's repository; omit it only
   when none exists. Flag shipped assets in the recipe when §3 of the
   standard permits them.

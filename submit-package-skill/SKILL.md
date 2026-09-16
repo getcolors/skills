@@ -52,6 +52,7 @@ Work in `getcolors/colors-website`. Read its `CLAUDE.md` before editing. Recipes
 ```yaml
 name: Example
 repository: owner/repository
+shape: single-node
 summary: Operate the production resource this Package Skill manages.
 keywords:
   - platform
@@ -67,6 +68,17 @@ package-skills:
 Recipe rules:
 
 - Keep `summary` concise and specific to what the Package Skill operates.
+- Set `shape` to what the Package Skill stands up: `single-node` (one
+  machine), `multi-node` (several machines), `kubernetes` (a cluster,
+  managed or self-hosted), `operator` (a controller installed into an
+  existing cluster), or `local` (no cloud resources). It renders as a chip
+  and a filter on the catalog; it is a facet over Package Skills, never a
+  separate skill kind.
+- Add `artifacts` only when the package ships or renders something worth
+  finding beyond its launcher, such as a CRD, a controller image, or a
+  rendered manifest: each entry has a `name` plus a repository-relative
+  `path` and/or a `note`. Tracked paths render as links to the repository;
+  rendered outputs describe where `build` writes them under `.colors/`.
 - Add keywords people will actually search for: platform, provider, resource, and common product names.
 - Use `branch` only when the source branch is not `main`.
 - Do not add `featured`; catalog maintainers control editorial featuring.
