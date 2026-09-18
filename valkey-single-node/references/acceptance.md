@@ -1,6 +1,7 @@
 # Acceptance doctrine
 
-The live build passed the retained-resource scope on 2026-09-18. Raw evidence
+The live build passed its service/recovery gates and subsequently authorized
+compute cleanup on 2026-09-18. Shared storage was preserved. Raw evidence
 is private; [evidence.md](evidence.md) maps every group to its source. The
 package owns executable gates; this document owns their interpretation.
 
@@ -20,7 +21,16 @@ package owns executable gates; this document owns their interpretation.
 | M health | Healthy monitor, no reported problems, backup/monitor timers active | Both complete audits and describes passed |
 | I convergence identity | Same instance/key/firewall/container creation identity and password | Explicit identity and password comparisons passed |
 | D0 deletion guard | Refuse protected delete before destructive work | Exit 2, expected message |
+| D1 authorized delete | One-run override; application cleanup, SSH-config removal, then compute destruction | Exit 0; 16:33:58–16:34:59 UTC |
+| D2 absence | Owned instance/firewall/provider SSH key return 404; managed local key/pub/profile known-hosts/config absent | Independent audits passed before and after repeat-delete |
+| D3 repeat-delete | Already destroyed deployment exits successfully | Exit 0; 16:37:33–16:37:36 UTC |
+| D4 storage preservation | Both shared buckets readable; non-Valkey metadata preserved; profile backups retained | Before/after/repeat summaries match; 20 profile backup objects remain |
+| D5 retired state | Retired coordination, idle lock, destroyed shared/node phases, removed key phase, empty resource states | Corrected state audit confirms all fields |
 | E audit completeness | Every required section plus explicit terminal sentinel | Final audits have LIVE_AUDIT_COMPLETE; final scratch probe has AOF_PROBE_COMPLETE |
+
+The preserved backup-object count does not establish byte-for-byte equality
+of every profile backup object; cleanup did not rehash their contents. Three
+profile state objects remain as retired coordination and empty resource states.
 
 The package monitor checks PING, AOF status, resource pressure, recent repeated
 restarts, and the newest **completed** backup's age. The live result proves
@@ -46,7 +56,8 @@ on shared storage.
 - AOF crash durability or a measured one-second data-loss ceiling.
 - Production-host replacement recovery, recovery from losing the live volume,
   or loading the RDB into the production service.
-- Actual destroy, cleanup of provider/local SSH artifacts, or repeat-delete.
+- Destruction of shared/managed buckets or live fault injection into destructive
+  backup retention. Compute deletion intentionally preserved stored backups.
 - Other compute providers, managed storage, cluster replication or failover.
 - Necessity of `no_head` or `no_check_bucket` under another rclone version.
 - Global immutability of a shared account or state bucket. Concurrent unrelated

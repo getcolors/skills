@@ -1,6 +1,7 @@
 # Harvest and claim-to-evidence map
 
-Harvested after the retained deployment passed its live gates on 2026-09-18.
+Harvested after the deployment passed its live gates on 2026-09-18, then
+updated after explicitly authorized compute cleanup and repeat-delete.
 All links below target the **private** deployment repository; sanitized
 excerpts are retained in the failure catalogue and acceptance document.
 No credentials, account endpoints or instance addresses are needed here.
@@ -16,6 +17,12 @@ No credentials, account endpoints or instance addresses are needed here.
 | Password remained unchanged | [password comparison](https://github.com/getcolors/valkey-vultr/blob/main/evidence/password-idempotence.txt) | Live; fingerprints compared privately, not published |
 | Provider/container identity stable; buckets readable; non-Valkey backup metadata unchanged; unrelated state changed | [identity and isolation](https://github.com/getcolors/valkey-vultr/blob/main/evidence/identity-and-isolation.txt) | Live; explicitly bounded observation |
 | Protected deletion refused | [delete guard](https://github.com/getcolors/valkey-vultr/blob/main/evidence/delete-guard.txt) | Live guard only |
+| Authorized delete and repeat-delete exit zero | [delete-1](https://github.com/getcolors/valkey-vultr/blob/main/evidence/delete-1.txt), [delete-2](https://github.com/getcolors/valkey-vultr/blob/main/evidence/delete-2.txt) | Live cleanup |
+| Owned provider IDs return 404; managed local SSH artifacts absent | [absence audit 1](https://github.com/getcolors/valkey-vultr/blob/main/evidence/deletion-audit-1.json), [absence audit 2](https://github.com/getcolors/valkey-vultr/blob/main/evidence/deletion-audit-2.json) | Live absence before and after repeat-delete |
+| Shared storage preserved through cleanup | [before-delete](https://github.com/getcolors/valkey-vultr/blob/main/evidence/buckets-before-delete.json), [after-delete](https://github.com/getcolors/valkey-vultr/blob/main/evidence/buckets-after-delete.json), [after-repeat](https://github.com/getcolors/valkey-vultr/blob/main/evidence/buckets-after-repeat-delete.json) | Live bounded metadata comparison; 20 profile backup objects remain |
+| Redis deployment identities/statuses unchanged during cleanup | [cleanup isolation](https://github.com/getcolors/valkey-vultr/blob/main/evidence/delete-isolation.txt) | Live bounded comparison; earlier concurrent-state limitation still applies |
+| Retired/idle coordination, destroyed shared/node phases, removed key phase, empty resource states | [retired state](https://github.com/getcolors/valkey-vultr/blob/main/evidence/retired-state.jsonl) | Live readback with corrected JSON field path |
+| Initial retired-state audit used wrong key-phase path and asserted | [audit failure](https://github.com/getcolors/valkey-vultr/blob/main/evidence/delete-state-audit-failure.txt) | Audit bug; corrected path `key.phase` produced the verified retired-state result |
 | Exact build/workflow revisions | [versions](https://github.com/getcolors/valkey-vultr/blob/main/evidence/versions.json) | Recorded immutable revisions plus observed runtime versions |
 | Retention fail-open, shell/YAML interpolation, public-probe tool-error ambiguity, password argv exposure and ignored monitor result fixed before deployment | [recorded review findings](https://github.com/getcolors/valkey-vultr/blob/main/HANDOFF.md) | Offline inspection/regression findings; no destructive live retention fault injection |
 
@@ -35,7 +42,12 @@ No credentials, account endpoints or instance addresses are needed here.
 - The broad unchanged-state assertion failed during concurrent account work.
   It was narrowed to the supported identity and non-Valkey backup observations;
   unrelated resources were preserved.
-- The deployment was retained; the only live deletion test exercised its guard.
+- The initial build retained the deployment. Subsequent explicit user
+  authorization enabled compute deletion and repeat-delete; shared buckets,
+  backup objects and retired coordination records were preserved.
+- The first retired-state audit looked at the wrong JSON field and reported
+  a missing key phase. Reading `key.phase` fixed the audit; the corrected
+  record says `removed`. This was not evidence of a failed provider delete.
 
 No upstream documentation/source disagreement was established during this
 harvest. No source-function authority is claimed for a contradiction. The

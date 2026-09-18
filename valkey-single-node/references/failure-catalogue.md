@@ -90,8 +90,13 @@ compute destruction is protected; set COLORS_PAR_COMPUTE_PREVENT_DESTROY=false t
 GUARDED_DELETE_EXIT=2
 ```
 
-The guarded command refused as intended. Resources were retained. The override,
-actual destroy, SSH cleanup and repeat-delete behavior were not tested live.
+The guarded command refused as intended, leaving resources in place at that
+time. Later explicit user authorization permitted a one-run override. Actual
+delete exited zero in 61 seconds; repeat-delete exited zero in 3 seconds.
+Independent audits found the owned instance, firewall and provider SSH key
+IDs returned 404, and the managed local key files and SSH config block were
+absent. Both shared buckets remained readable, with 20 profile backup objects
+preserved. The original guard refusal alone did not prove these later facts.
 
 ## Completion-marker read failure looks like an incomplete set, offline only
 

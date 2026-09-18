@@ -22,8 +22,10 @@ Search [the failure catalogue](references/failure-catalogue.md) before changing 
 
 These findings came from `valkey-vultr` on 2026-09-18: two successful
 creates, two healthy describes, one recovery rehearsal, complete host audits,
-and two deliberate scratch AOF/RDB comparisons. The deployment was retained.
-Actual deletion and production-host recovery were not tested.
+and two deliberate scratch AOF/RDB comparisons. After those checks, the user
+authorized cleanup: delete and repeat-delete exited zero, and provider and
+local SSH absence were verified. Shared buckets and backup objects remain.
+Production-host recovery and destructive backup retention were not tested.
 
 The evidence repository, [getcolors/valkey-vultr](https://github.com/getcolors/valkey-vultr),
 is **private**; its links require repository access. Sanitized observations
@@ -111,7 +113,11 @@ Both existing buckets remained readable. Non-Valkey **backup** object counts
 and path/size/modification-time hashes were unchanged. A concurrent
 `redis-vultr-demo` appeared, and non-Valkey **state** objects increased from
 10 to 12. The build supports namespace isolation for its own operations,
-not a claim that the whole shared state bucket stayed unchanged.
+not a claim that the whole shared state bucket stayed unchanged. During the
+later, narrower cleanup interval, before/after summaries matched for both
+buckets, including non-Valkey metadata and the 20 profile backup objects.
+The compute coordination record remains retired with empty resource states;
+preserving this record is distinct from retaining a running instance.
 
 Offline review found that treating an unreadable completion marker as
 incomplete could let retention delete valid backups. The package now
@@ -123,6 +129,7 @@ public-probe tool-error handling were also offline review/test findings.
 
 The R2 upload path worked with `no_check_bucket`, `no_head`, and known-size
 `copyto`. This build did not remove those flags, so it does not prove which
-ones R2 requires. Other providers, managed buckets, teardown, and recovery
-onto a replacement production host remain unverified. Use the
+ones R2 requires. Other providers, managed buckets, destructive backup
+retention, and recovery onto a replacement production host remain unverified.
+Compute cleanup does not establish any of those claims. Use the
 [acceptance checklist](references/acceptance.md) when changing a pin.

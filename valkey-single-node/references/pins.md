@@ -1,6 +1,7 @@
 # Verified versions and decay
 
-Verified on 2026-09-18 against one retained Vultr deployment. The authoritative
+Verified on 2026-09-18 against one Vultr deployment, subsequently deleted
+with explicit user authorization while preserving shared storage. The authoritative
 record is private [versions.json](https://github.com/getcolors/valkey-vultr/blob/main/evidence/versions.json),
 with runtime observations in private [live-audit-2.txt](https://github.com/getcolors/valkey-vultr/blob/main/evidence/live-audit-2.txt).
 
@@ -52,6 +53,8 @@ backup/marker readbacks. The necessity of the R2 flags remains unknown unless
 an explicitly authorized comparison establishes it.
 
 On a compute or SDK pin change, repeat both SSH-mode offline contracts,
-credential-free rendering, live convergence and retained-resource identity
-checks. A future teardown claim requires its own authorized destroy and
-absence/repeat-delete checks; this build cannot supply that evidence.
+credential-free rendering, live convergence and stable-resource identity
+checks. Repeat the authorized destroy, provider/local SSH absence and
+repeat-delete checks at the new pin; they passed at this pin. Shared bucket
+preservation must be checked separately from compute deletion. No managed
+bucket destruction or destructive backup-retention claim follows from it.

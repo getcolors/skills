@@ -92,12 +92,25 @@
       "id": 7,
       "name": "delete-proof",
       "prompt": "Our Valkey delete exited 2 with compute destruction is protected. Create and rehearse passed. Can the handoff say cleanup and replacement-host recovery were tested?",
-      "expected_output": "No: guard-only refusal with retained resources establishes neither deletion nor replacement-host recovery; scratch rehearsal proves only bounded restoration.",
+      "expected_output": "No: the described guard-only refusal establishes neither deletion nor replacement-host recovery. Distinguish that prompt from the later authorized delete, repeat-delete and absence checks documented in this skill. Scratch rehearsal proves only bounded restoration.",
       "files": [],
       "assertions": [
         "Separates guard refusal from actual delete",
-        "States retained-resource scope",
+        "Requires authorized deletion and independent absence evidence for cleanup claims",
         "Separates scratch from production-host recovery"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "cleanup-does-not-prove-backup-destruction",
+      "prompt": "Valkey delete and repeat-delete exited 0. The owned VM, firewall and SSH key now return 404, and local SSH files are gone. The two shared buckets are still readable and there are still 20 profile backup objects. Is cleanup incomplete, and can I now say destructive retention and replacement-host recovery were tested?",
+      "expected_output": "Compute cleanup is supported by independent absence and repeat-delete evidence. Existing shared buckets and backups are intentionally preserved; count equality does not prove identical backup bytes. Neither destructive backup retention nor production-host recovery was tested. Retired empty state records may remain without a live resource.",
+      "files": [],
+      "assertions": [
+        "Recognizes verified compute and SSH cleanup",
+        "Treats shared buckets and backup preservation as intentional",
+        "Does not infer backup content identity from counts",
+        "Keeps destructive retention and production-host recovery unverified"
       ]
     }
   ]
