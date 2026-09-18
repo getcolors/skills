@@ -1,0 +1,104 @@
+{
+  "skill_name": "valkey-single-node",
+  "evals": [
+    {
+      "id": 0,
+      "name": "compatibility-version",
+      "prompt": "I pinned Valkey 9.1.2, but INFO says redis_version:7.2.4. Did Docker run an old image? server_name is valkey and valkey_version is 9.1.2.",
+      "expected_output": "Identify the Redis compatibility field and require server_name plus exact valkey_version, without recommending a reinstall.",
+      "files": [],
+      "assertions": [
+        "Explains compatibility metadata",
+        "Uses valkey_version:9.1.2 and server_name:valkey",
+        "Does not diagnose a downgrade from redis_version alone"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "auth-exit-zero",
+      "prompt": "My Valkey smoke test passes because valkey-cli PING exits 0. But stdout says NOAUTH Authentication required. Wrong password also exits zero and prints WRONGPASS. Is auth broken?",
+      "expected_output": "Authentication refused correctly but the test is wrong. Parse replies, require exact PONG for positive and refusal with no PONG for negatives.",
+      "files": [],
+      "assertions": [
+        "Rejects exit-code-only acceptance",
+        "Requires positive PONG control",
+        "Requires refusal text and excludes PONG in negative probes"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "empty-rdb-restore",
+      "prompt": "I downloaded a completed Valkey backup, checksum matches. Started a scratch 9.1.2 container with appendonly yes and dump.rdb in /data. It answers PONG but DBSIZE is 0. Logs say Creating AOF base file appendonly.aof.1.base.rdb on server start. Is the backup empty?",
+      "expected_output": "Explain the reproduced AOF precedence trap; use AOF-off scratch restoration and verify loading and smoke data. Do not present production-host recovery as tested.",
+      "files": [],
+      "assertions": [
+        "Identifies AOF-on empty-manifest behavior",
+        "Recommends appendonly no for scratch check",
+        "Requires loading:0 and expected data",
+        "Does not claim production restore or crash durability verified"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "audit-stdin",
+      "prompt": "My ssh host bash -s audit exits 0 right after Server identity. I changed the direct docker compose exec -T calls to noninteractive, and now it stops after valkey-monitor: ok. Why is there still no final backup section?",
+      "expected_output": "Diagnose nested exec consuming heredoc stdin. Buffer the remote script, run with closed input for non-input tasks, and require final sentinel. Preserve intentional RDB stdin streams.",
+      "files": [],
+      "assertions": [
+        "Names inherited heredoc stdin",
+        "Recognizes monitor nested exec",
+        "Buffers remote script and requires sentinel",
+        "Does not treat exit zero as full completion"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "retention-read-error",
+      "prompt": "Our Valkey R2 backup cleanup sees a 403 reading .complete and considers that set incomplete. It is two days old so it will purge it. The marker might exist though. What should happen?",
+      "expected_output": "Fail closed: listing/read failures are not absence; complete all marker reads before purging, keep incomplete sets for manual inspection and preserve newest complete set. Label no-purge fault evidence offline.",
+      "files": [],
+      "assertions": [
+        "Blocks purge on read errors",
+        "Distinguishes absence from failed read",
+        "Preserves newest completed and incomplete sets",
+        "Labels destructive retention untested live"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "reconverge-start-time",
+      "prompt": "Second Valkey create passed but Docker StartedAt changed. Container ID and CreatedAt are identical, password unchanged. Should I call this an idempotence failure?",
+      "expected_output": "Explain intentional smoke restart; compare stable instance/key/firewall/container creation identity; avoid claiming no downtime or no restart.",
+      "files": [],
+      "assertions": [
+        "Identifies deliberate restart gate",
+        "Uses stable IDs and CreatedAt",
+        "Does not claim restart-free convergence"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "shared-state-limit",
+      "prompt": "After my Valkey test, unrelated backup metadata matches but the shared state bucket has two extra objects and a redis-vultr-demo instance appeared. Can I report no changes to siblings and delete the demo to get a clean baseline?",
+      "expected_output": "Do not touch unrelated resources; report the bounded unchanged backup metadata and Valkey identities, while stating shared-state changes/concurrent activity prevent global unchanged claims.",
+      "files": [],
+      "assertions": [
+        "Rejects deleting unrelated deployment",
+        "Limits unchanged claim to supported metadata/identities",
+        "Explicitly disclaims global state immutability"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "delete-proof",
+      "prompt": "Our Valkey delete exited 2 with compute destruction is protected. Create and rehearse passed. Can the handoff say cleanup and replacement-host recovery were tested?",
+      "expected_output": "No: guard-only refusal with retained resources establishes neither deletion nor replacement-host recovery; scratch rehearsal proves only bounded restoration.",
+      "files": [],
+      "assertions": [
+        "Separates guard refusal from actual delete",
+        "States retained-resource scope",
+        "Separates scratch from production-host recovery"
+      ]
+    }
+  ]
+}
